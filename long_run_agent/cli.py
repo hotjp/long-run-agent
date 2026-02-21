@@ -365,6 +365,9 @@ def main():
 
     subparsers = parser.add_subparsers(dest="command", help="可用命令")
 
+    # ========== 初始化 ==========
+    subparsers.add_parser("init", help="安装初始化向导")
+
     # ========== 版本管理 ==========
     subparsers.add_parser("version", help="显示版本信息")
     subparsers.add_parser("upgrade", help="执行升级")
@@ -452,6 +455,11 @@ def main():
         return
 
     cli = LRACLI()
+
+    if args.command == "init":
+        from .installer import main as installer_main
+        installer_main()
+        return
 
     if args.command == "version":
         cli.version()

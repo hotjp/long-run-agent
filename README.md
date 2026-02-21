@@ -6,10 +6,6 @@
 
 基于 Anthropic 论文 [Effective Harnesses for Long-Running Agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents) 的最佳实践实现。
 
-**A powerful framework for managing long-running AI Agent tasks**
-
-Based on best practices from Anthropic's paper [Effective Harnesses for Long-Running Agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents).
-
 [![PyPI version](https://img.shields.io/pypi/v/long-run-agent.svg)](https://pypi.org/project/long-run-agent/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://www.python.org/)
@@ -22,59 +18,51 @@ Based on best practices from Anthropic's paper [Effective Harnesses for Long-Run
 
 # 中文
 
-## 一键安装
+## 安装
 
 ```bash
 pip install long-run-agent
 ```
 
-就这么简单。
+安装完成后，**运行初始化向导**：
+
+```bash
+lra init
+```
+
+这会：
+- 🌐 让你选择语言（中文/英文）
+- 🔧 自动配置 PATH 环境变量
+- 🤖 显示 AI Agent 引导提示词
 
 ---
 
-## 🤖 给 AI Agent 使用
+## 🤖 给 AI Agent 使用（30秒上手）
 
-**只需两步，让你的 AI Agent 拥有长期记忆：**
-
-### 1. 初始化项目
+**第一步：初始化项目**
 
 ```bash
 cd /path/to/your/project
 lra project create --name "我的项目"
 ```
 
-### 2. 告诉你的 AI Agent
+**第二步：告诉 AI Agent**
 
-> **每次开始工作时，先读取 `.long-run-agent/feature_list.json`，了解当前项目进度和待开发功能。完成后更新对应 Feature 的状态。**
+> **每次开始工作，先读取 `.long-run-agent/feature_list.json` 了解项目进度和待开发功能。完成后更新对应 Feature 的状态。**
 
-就这样。AI Agent 会自动：
-- 知道哪些功能已完成
-- 知道哪些功能待开发
-- 知道每个功能的优先级
-- 跨会话保持项目记忆
-
-**高级用法：** 让 AI Agent 读取 `.long-run-agent/specs/` 下的需求文档，了解每个功能的详细设计。
+就这样！AI Agent 会自动拥有跨会话的项目记忆。
 
 ---
 
-## 快速上手
+## 快速命令
 
 ```bash
-# 查看版本
-lra version
-
-# 创建 Feature
-lra feature create "用户登录功能" --category backend --priority P0
-
-# 查看状态
-lra feature list
-
-# 更新状态
-lra feature status feature_001 --set in_progress
-lra feature status feature_001 --set completed
-
-# 查看统计
-lra stats
+lra version                           # 查看版本
+lra project create --name "我的项目"   # 初始化项目
+lra feature create "登录功能" -p P0    # 创建功能
+lra feature list                      # 功能列表
+lra feature status <id> --set completed  # 标记完成
+lra stats                             # 项目统计
 ```
 
 ---
@@ -83,54 +71,37 @@ lra stats
 
 | 挑战 | LRA 如何解决 |
 |------|-------------|
-| **上下文窗口限制** | 状态持久化在 `.long-run-agent/` 目录，AI 随时可读 |
-| **过早完成** | 状态流转规则强制验证，测试通过才能标记完成 |
-| **一次性做太多** | Feature 粒度拆分，按优先级逐个开发 |
+| **上下文窗口限制** | 状态持久化，AI 随时可读 |
+| **过早完成** | 状态流转强制验证 |
+| **一次性做太多** | Feature 粒度拆分 |
 | **状态追踪困难** | `lra feature list` 一目了然 |
 | **需求文档混乱** | 标准模板 + 自动校验 |
 
 ---
 
-## 核心特性
+## 核心功能
 
-### 🔄 自动升级
-- 版本检测 + 自动数据迁移
-- 备份 + 回滚，零风险
-
-### 📋 7 状态管理
-```
-pending → in_progress → pending_test → completed
-         ↓              ↓
-      blocked ←     test_failed
-```
-
-### 📝 需求文档
-- 标准模板自动生成
-- 完整性自动校验
-
-### 📊 代码变更记录
-- 按 Feature 分文件存储
-- 支持 Git Commit 关联
-
-### 📜 操作审计
-- 谁在什么时候做了什么
-- 完整追溯
-
-### 🔀 Git 集成
-- 自动获取 Commit 信息
-- Branch 命名规范检测
+- 🔄 **自动升级** - 版本检测 + 数据迁移
+- 📋 **7 状态管理** - pending → completed 完整流转
+- 📝 **需求文档** - 标准模板 + 完整性校验
+- 📊 **代码变更记录** - 按 Feature 分文件存储
+- 📜 **操作审计** - 完整操作日志追溯
+- 🔀 **Git 集成** - Commit/Branch 自动关联
 
 ---
 
 ## CLI 命令速查
 
 ```bash
-# 版本管理
-lra version              # 显示版本
-lra upgrade              # 执行升级
-lra rollback             # 回滚
+# 初始化
+lra init                    # 安装向导
+lra version                 # 版本信息
 
-# Feature 管理
+# 项目
+lra project create --name <name>
+lra project list
+
+# Feature
 lra feature create <title> [--priority P0|P1|P2]
 lra feature list
 lra feature status <id> [--set <status>]
@@ -140,68 +111,27 @@ lra spec create <feature_id>
 lra spec validate <feature_id>
 lra spec list
 
-# 代码记录
+# 记录
 lra records --feature <id>
 lra records --file <path>
 
-# 项目管理
-lra project create --name <name>
-lra project list
-
 # 其他
-lra stats                # 项目统计
-lra logs                 # 操作日志
-lra code check <path>    # 代码检查
-lra git --feature <id>   # Git 信息
-lra statuses             # 状态列表
-```
-
----
-
-## 目录结构
-
-初始化后会在项目根目录创建：
-
-```
-.long-run-agent/
-├── config.json              # 项目配置 + 版本
-├── feature_list.json        # Feature 列表 ← AI Agent 读这个
-├── progress.log             # 操作流水账
-├── operation_log.json       # 审计日志
-├── specs/                   # 需求文档 ← 也可以读这个
-├── records/                 # 代码变更记录
-└── backup/                  # 升级备份
+lra stats / logs / code check / git / statuses
 ```
 
 ---
 
 ## 与 AI Agent 协作示例
 
-**场景：新功能开发**
-
-```bash
-# 1. 创建 Feature
-lra feature create "支付功能" --priority P0
-
-# 2. 告诉 AI Agent
-# "请读取 .long-run-agent/feature_list.json，实现 feature_042 支付功能。
-#  完成后运行 lra feature status feature_042 --set pending_test"
-
-# 3. AI Agent 工作完成后检查
-lra feature status feature_042
-
-# 4. 测试通过后标记完成
-lra feature status feature_042 --set completed
 ```
+# 告诉 AI Agent：
 
-**场景：跨会话继续开发**
+请读取 .long-run-agent/feature_list.json，告诉我：
+1. 当前有哪些 pending 状态的功能
+2. 哪些是 P0 优先级
+3. 继续开发哪个功能
 
-```
-# AI Agent 启动时说：
-> "请读取 .long-run-agent/feature_list.json，告诉我：
->  1. 当前有哪些 pending 状态的功能
->  2. 哪些是 P0 优先级
->  3. 继续开发哪个功能"
+完成后更新状态：lra feature status <id> --set completed
 ```
 
 ---
@@ -215,7 +145,7 @@ lra feature status feature_042 --set completed
 
 ---
 
-## 更多资源
+## 链接
 
 - **GitHub**: https://github.com/hotjp/long-run-agent
 - **PyPI**: https://pypi.org/project/long-run-agent/
@@ -225,86 +155,88 @@ lra feature status feature_042 --set completed
 
 # English
 
-## One-Line Install
+## Installation
 
 ```bash
 pip install long-run-agent
 ```
 
-That's it.
+After installation, **run the setup wizard**:
+
+```bash
+lra init
+```
+
+This will:
+- 🌐 Let you choose language (Chinese/English)
+- 🔧 Auto-configure PATH environment variable
+- 🤖 Display AI Agent guidance prompt
 
 ---
 
-## 🤖 For AI Agents
+## 🤖 For AI Agents (30 seconds)
 
-**Two steps to give your AI Agent long-term memory:**
-
-### 1. Initialize Project
+**Step 1: Initialize Project**
 
 ```bash
 cd /path/to/your/project
 lra project create --name "My Project"
 ```
 
-### 2. Tell Your AI Agent
+**Step 2: Tell Your AI Agent**
 
 > **At the start of each session, read `.long-run-agent/feature_list.json` to understand current progress and pending features. Update Feature status when done.**
 
-Your AI Agent will automatically:
-- Know which features are completed
-- Know which features are pending
-- Know feature priorities
-- Maintain project memory across sessions
+That's it! Your AI Agent now has cross-session project memory.
 
 ---
 
-## Quick Reference
+## Quick Commands
 
 ```bash
-lra version                           # Show version
-lra project create --name "My App"    # Initialize project
-lra feature create "Login" -p P0      # Create feature
-lra feature list                      # List features
-lra feature status feature_001 --set in_progress
-lra stats                             # Show statistics
+lra version                            # Show version
+lra project create --name "My Project" # Initialize project
+lra feature create "Login" -p P0       # Create feature
+lra feature list                       # List features
+lra feature status <id> --set completed
+lra stats                              # Project statistics
 ```
 
 ---
 
-## CLI Commands
+## Core Features
+
+- 🔄 **Auto-upgrade** - Version detection + data migration
+- 📋 **7-state management** - pending → completed workflow
+- 📝 **Requirements docs** - Templates + validation
+- 📊 **Code change records** - Per-feature storage
+- 📜 **Operation audit** - Complete logs
+- 🔀 **Git integration** - Commit/Branch tracking
+
+---
+
+## CLI Reference
 
 ```bash
-# Version
-lra version / upgrade / rollback
+# Init
+lra init / version
 
-# Features
+# Project
+lra project create --name <name>
+lra project list
+
+# Feature
 lra feature create <title> [--priority P0|P1|P2]
 lra feature list / status <id>
 
-# Specs
+# Spec
 lra spec create / validate / list
 
 # Records
 lra records --feature <id> / --file <path>
 
-# Project
-lra project create / list
-
 # Utils
 lra stats / logs / code check / git / statuses
-```
-
----
-
-## Directory Structure
-
-```
-.long-run-agent/
-├── config.json              # Config + version
-├── feature_list.json        # Feature list ← AI reads this
-├── specs/                   # Requirement docs
-├── records/                 # Code change records
-└── backup/                  # Upgrade backups
 ```
 
 ---

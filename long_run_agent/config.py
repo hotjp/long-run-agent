@@ -14,7 +14,7 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime
 
 
-CURRENT_VERSION = "2.0.0"
+CURRENT_VERSION = "2.0.1"
 SCHEMA_VERSION = "2026-02-21"
 
 
