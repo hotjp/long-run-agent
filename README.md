@@ -30,8 +30,8 @@ pip install long-run-agent
 python3 -m long_run_agent
 ```
 
-这会：
-- 🌐 让你选择语言（中文/英文）
+这会启动交互式安装向导：
+- 🌐 语言选择（中文/英文）- **方向键切换，回车确认**
 - 🔧 自动配置 PATH 环境变量
 - ✅ 配置完成后立即可用 `lra` 命令
 - 🤖 显示 AI Agent 引导提示词
