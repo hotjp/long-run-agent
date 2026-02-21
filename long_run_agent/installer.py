@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-LRA 安装初始化向导 v2.0.5
+LRA 安装初始化向导 v2.0.6
 简洁现代风格 - 无边框 + 方向键交互
 """
 
@@ -107,9 +107,9 @@ class KeyInput:
     
     @classmethod
     def select_option(cls, options: List[str], default: int = 0, 
-                      prompt: str = "选择", title: str = "") -> int:
+                      prompt: str = "选择") -> int:
         """
-        交互式选项选择
+        交互式选项选择（仅选项区域）
         返回选中的索引
         """
         # 非 TTY 环境，使用简单输入
@@ -127,37 +127,12 @@ class KeyInput:
         
         selected = default
         width = get_terminal_width()
-        first_run = True
+        options_lines = len(options) + 2  # 选项 + 空行 + 提示
         
-        # 计算总行数（标题2行 + 选项len行 + 提示2行）
-        total_lines = (2 if title else 0) + len(options) + 3
+        # 首次绘制选项
+        cls._draw_options(options, selected, width)
         
         while True:
-            # 清除之前的输出（移动光标到开始位置并清除）
-            if HAS_COLOR and not first_run:
-                print(f"\033[{total_lines}A\033[J", end='')
-            first_run = False
-            
-            # 显示标题
-            if title:
-                print(f"  {C.BOLD}{C.CYAN}{title}{C.RESET}")
-                print()
-            
-            # 显示选项
-            for i, opt in enumerate(options):
-                # 截断过长的选项
-                display_opt = opt[:width-8] if len(opt) > width-8 else opt
-                
-                if i == selected:
-                    print(f"    {C.GREEN}➜{C.RESET}  {C.BOLD}{C.GREEN}{display_opt}{C.RESET}")
-                else:
-                    print(f"       {display_opt}")
-            
-            # 显示提示
-            print()
-            print(f"  {C.DIM}↑↓ 切换选项  |  回车确认{C.RESET}")
-            
-            # 读取按键
             key = cls.get_key()
             
             if key == cls.UP:
@@ -167,12 +142,29 @@ class KeyInput:
             elif key in [cls.ENTER, cls.ENTER_ALT]:
                 return selected
             elif key in ['1', '2', '3', '4', '5']:
-                # 数字快捷键
                 idx = int(key) - 1
                 if 0 <= idx < len(options):
                     return idx
             elif key.lower() == 'q':
                 raise KeyboardInterrupt()
+            
+            # 重绘选项区域
+            if HAS_COLOR:
+                print(f"\033[{options_lines}A\033[J", end='')
+                cls._draw_options(options, selected, width)
+    
+    @classmethod
+    def _draw_options(cls, options: List[str], selected: int, width: int):
+        """绘制选项"""
+        for i, opt in enumerate(options):
+            display_opt = opt[:width-8] if len(opt) > width-8 else opt
+            if i == selected:
+                print(f"    {C.GREEN}➜{C.RESET}  {C.BOLD}{C.GREEN}{display_opt}{C.RESET}")
+            else:
+                print(f"       {display_opt}")
+        
+        print()
+        print(f"  {C.DIM}↑↓ 切换选项  |  回车确认{C.RESET}")
 
 
 # ============== UI 组件（无边框版） ==============
@@ -238,7 +230,7 @@ class UI:
 
 # ============== 版本和语言配置 ==============
 
-VERSION = "2.0.5"
+VERSION = "2.0.6"
 
 LANGUAGES = {
     "zh": {
@@ -395,8 +387,13 @@ class LRAInstaller:
     def show_welcome(self):
         """欢迎界面"""
         UI.blank()
-        # 简洁的 LRA 标识
-        print(f"  {C.BOLD}{C.CYAN}LRA{C.RESET}")
+        # LRA ASCII Art
+        print(f"  {C.BOLD}{C.CYAN}██╗     ███████╗██████╗ {C.RESET}")
+        print(f"  {C.BOLD}{C.CYAN}██║     ██╔════╝██╔══██╗{C.RESET}")
+        print(f"  {C.BOLD}{C.CYAN}██║     █████╗  ██████╔╝{C.RESET}")
+        print(f"  {C.BOLD}{C.CYAN}██║     ██╔══╝  ██╔══██╗{C.RESET}")
+        print(f"  {C.BOLD}{C.CYAN}███████╗███████╗██║  ██║{C.RESET}")
+        print(f"  {C.BOLD}{C.CYAN}╚══════╝╚══════╝╚═╝  ╚═╝{C.RESET}")
         UI.blank()
         print(f"  {C.BOLD}{self.T['welcome']}{C.RESET}")
         print(f"  {C.DIM}{self.T['tagline']}{C.RESET}")
@@ -409,10 +406,13 @@ class LRAInstaller:
         UI.blank()
         
         options = [self.T['lang_zh'], self.T['lang_en']]
-        title = self.T['lang_title']
+        
+        # 先绘制标题（不会被清除）
+        print(f"  {C.BOLD}{C.CYAN}{self.T['lang_title']}{C.RESET}")
+        print()
         
         try:
-            selected = KeyInput.select_option(options, default=0, title=title)
+            selected = KeyInput.select_option(options, default=0)
             self.lang = "en" if selected == 1 else "zh"
             self.T = LANGUAGES[self.lang]
             
@@ -428,16 +428,15 @@ class LRAInstaller:
     def configure_path(self) -> bool:
         """PATH 配置"""
         UI.blank()
-        UI.subtitle(self.T['path_title'])
+        print(f"  {C.BOLD}{C.CYAN}{self.T['path_title']}{C.RESET}")
         UI.blank()
         UI.info(self.T['path_desc'])
         UI.blank()
         
         options = [self.T['path_yes'], self.T['path_no']]
-        title = self.T['path_title']
         
         try:
-            selected = KeyInput.select_option(options, default=0, title=title)
+            selected = KeyInput.select_option(options, default=0)
         except KeyboardInterrupt:
             selected = 0
         
