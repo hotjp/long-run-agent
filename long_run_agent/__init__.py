@@ -2,7 +2,7 @@
 Long-Running Agent - A powerful framework for managing long-running AI Agent tasks
 """
 
-__version__ = "2.0.4"
+__version__ = "2.0.5"
 __author__ = "Long-Running Agent Contributors"
 
 from .config import Config, SafeJson

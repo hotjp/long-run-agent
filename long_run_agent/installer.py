@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-LRA 安装初始化向导 v2.0.4
+LRA 安装初始化向导 v2.0.5
 简洁现代风格 - 无边框 + 方向键交互
 """
 
@@ -127,11 +127,16 @@ class KeyInput:
         
         selected = default
         width = get_terminal_width()
+        first_run = True
+        
+        # 计算总行数（标题2行 + 选项len行 + 提示2行）
+        total_lines = (2 if title else 0) + len(options) + 3
         
         while True:
-            # 清除之前的输出
-            lines_to_clear = len(options) + 3
-            print(f"\033[{lines_to_clear}A\033[J", end='') if HAS_COLOR else print()
+            # 清除之前的输出（移动光标到开始位置并清除）
+            if HAS_COLOR and not first_run:
+                print(f"\033[{total_lines}A\033[J", end='')
+            first_run = False
             
             # 显示标题
             if title:
@@ -233,11 +238,11 @@ class UI:
 
 # ============== 版本和语言配置 ==============
 
-VERSION = "2.0.4"
+VERSION = "2.0.5"
 
 LANGUAGES = {
     "zh": {
-        "welcome": "欢迎使用 LRA 安装向导",
+        "welcome": "欢迎使用 LRA (Long Run Agent) 安装向导",
         "version": f"版本 {VERSION}",
         "tagline": "长时 AI Agent 任务管理框架",
         
@@ -271,7 +276,7 @@ LANGUAGES = {
         "log_title": "安装日志",
     },
     "en": {
-        "welcome": "Welcome to LRA Installer",
+        "welcome": "Welcome to LRA (Long Run Agent) Installer",
         "version": f"Version {VERSION}",
         "tagline": "Long-Running AI Agent Task Manager",
         
@@ -390,9 +395,8 @@ class LRAInstaller:
     def show_welcome(self):
         """欢迎界面"""
         UI.blank()
-        print(f"  {C.BOLD}{C.CYAN}╦ ╦┌─┐┌┐╔╦╗┬─┐┌─┐┬ ┬{C.RESET}")
-        print(f"  {C.BOLD}{C.CYAN}║║║├┤ ├┴╗ │ ├┬┘├─┤└┬┘{C.RESET}")
-        print(f"  {C.BOLD}{C.CYAN}╚╩╝└─┘└─┘ ┴ ┴└─┴ ┴ ┴ {C.RESET}")
+        # 简洁的 LRA 标识
+        print(f"  {C.BOLD}{C.CYAN}LRA{C.RESET}")
         UI.blank()
         print(f"  {C.BOLD}{self.T['welcome']}{C.RESET}")
         print(f"  {C.DIM}{self.T['tagline']}{C.RESET}")
@@ -407,19 +411,8 @@ class LRAInstaller:
         options = [self.T['lang_zh'], self.T['lang_en']]
         title = self.T['lang_title']
         
-        # 显示标题和初始选项
-        print(f"  {C.BOLD}{C.CYAN}{title}{C.RESET}")
-        print()
-        for i, opt in enumerate(options):
-            if i == 0:
-                print(f"    {C.GREEN}➜{C.RESET}  {C.BOLD}{C.GREEN}{opt}{C.RESET}")
-            else:
-                print(f"       {opt}")
-        print()
-        print(f"  {C.DIM}↑↓ 切换选项  |  回车确认{C.RESET}")
-        
         try:
-            selected = KeyInput.select_option(options, default=0)
+            selected = KeyInput.select_option(options, default=0, title=title)
             self.lang = "en" if selected == 1 else "zh"
             self.T = LANGUAGES[self.lang]
             
@@ -441,20 +434,10 @@ class LRAInstaller:
         UI.blank()
         
         options = [self.T['path_yes'], self.T['path_no']]
-        
-        # 显示初始选项
-        print(f"  {C.BOLD}{C.CYAN}{self.T['path_title']}{C.RESET}")
-        print()
-        for i, opt in enumerate(options):
-            if i == 0:
-                print(f"    {C.GREEN}➜{C.RESET}  {C.BOLD}{C.GREEN}{opt}{C.RESET}")
-            else:
-                print(f"       {opt}")
-        print()
-        print(f"  {C.DIM}↑↓ 切换选项  |  回车确认{C.RESET}")
+        title = self.T['path_title']
         
         try:
-            selected = KeyInput.select_option(options, default=0)
+            selected = KeyInput.select_option(options, default=0, title=title)
         except KeyboardInterrupt:
             selected = 0
         
