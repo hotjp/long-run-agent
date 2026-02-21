@@ -24,16 +24,19 @@
 pip install long-run-agent
 ```
 
-安装完成后，**运行初始化向导**：
+**安装后，运行初始化：**
 
 ```bash
-lra init
+python3 -m long_run_agent
 ```
 
 这会：
 - 🌐 让你选择语言（中文/英文）
 - 🔧 自动配置 PATH 环境变量
+- ✅ 配置完成后立即可用 `lra` 命令
 - 🤖 显示 AI Agent 引导提示词
+
+> 💡 **提示**：如果提示 `command not found`，请运行 `source ~/.zshrc` 或重新打开终端。
 
 ---
 
@@ -161,16 +164,19 @@ lra stats / logs / code check / git / statuses
 pip install long-run-agent
 ```
 
-After installation, **run the setup wizard**:
+**After installation, run the setup:**
 
 ```bash
-lra init
+python3 -m long_run_agent
 ```
 
 This will:
 - 🌐 Let you choose language (Chinese/English)
 - 🔧 Auto-configure PATH environment variable
+- ✅ After setup, `lra` command is ready to use
 - 🤖 Display AI Agent guidance prompt
+
+> 💡 **Tip**: If you see `command not found`, run `source ~/.zshrc` or restart your terminal.
 
 ---
 

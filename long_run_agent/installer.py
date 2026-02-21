@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Optional
 
 # 版本信息
-VERSION = "2.0.1"
+VERSION = "2.0.2"
 
 # ============== 多语言配置 ==============
 
