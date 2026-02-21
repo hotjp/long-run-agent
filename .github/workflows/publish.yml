@@ -5,12 +5,16 @@ on:
     types: [published]
   workflow_dispatch:  # 允许手动触发
 
+permissions:
+  id-token: write  # 用于 trusted publishing
+  contents: read
+
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write  # 用于 trusted publishing
-      contents: read
+    environment:
+      name: pypi
+      url: https://pypi.org/p/long-run-agent/
 
     steps:
       - name: Checkout code
