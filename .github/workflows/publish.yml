@@ -35,6 +35,5 @@ jobs:
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-        # 如果不用 trusted publishing，可以用 token:
-        # with:
-        #   password: ${{ secrets.PYPI_API_TOKEN }}
+        with:
+          skip-existing: true  # 跳过已存在的版本
