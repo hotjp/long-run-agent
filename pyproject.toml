@@ -1,0 +1,76 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "long-run-agent"
+version = "2.0.0"
+description = "A powerful framework for managing long-running AI Agent tasks"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.8"
+authors = [
+    {name = "Long-Running Agent Contributors"}
+]
+keywords = [
+    "ai",
+    "agent",
+    "llm",
+    "task-management",
+    "feature-tracking",
+    "development-tools",
+    "cli"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Utilities",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "black>=23.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0",
+]
+
+[project.scripts]
+lra = "long_run_agent.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/clawdbot-ai/long-run-agent"
+Documentation = "https://github.com/clawdbot-ai/long-run-agent#readme"
+Repository = "https://github.com/clawdbot-ai/long-run-agent"
+Issues = "https://github.com/clawdbot-ai/long-run-agent/issues"
+
+[tool.setuptools]
+packages = ["long_run_agent"]
+
+[tool.setuptools.package-data]
+long_run_agent = ["py.typed"]
+
+[tool.black]
+line-length = 100
+target-version = ["py38", "py39", "py310", "py311", "py312"]
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "W", "I", "N", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true

@@ -1,0 +1,54 @@
+{
+  "name": "long-run-agent",
+  "version": "2.0.0",
+  "description": "A powerful framework for managing long-running AI Agent tasks",
+  "keywords": [
+    "ai",
+    "agent",
+    "llm",
+    "task-management",
+    "feature-tracking",
+    "development-tools",
+    "cli"
+  ],
+  "author": "Long-Running Agent Contributors",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/clawdbot-ai/long-run-agent.git"
+  },
+  "bugs": {
+    "url": "https://github.com/clawdbot-ai/long-run-agent/issues"
+  },
+  "homepage": "https://github.com/clawdbot-ai/long-run-agent#readme",
+  "bin": {
+    "lra": "./bin/lra.js"
+  },
+  "files": [
+    "bin/",
+    "scripts/",
+    "long_run_agent/",
+    "pyproject.toml",
+    "README.md",
+    "README-EN.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "scripts": {
+    "postinstall": "node scripts/check-python.js",
+    "test": "echo \"Run tests with pytest in Python\" && exit 0"
+  },
+  "dependencies": {},
+  "devDependencies": {},
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}

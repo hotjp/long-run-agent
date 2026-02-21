@@ -1,0 +1,70 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# LRA specific
+.ruff_cache/
+.long-run-agent/
+*.log
+
+# Backup files
+*.bak
+backup/
+
+# Distribution
+dist/
+*.whl
+*.tar.gz
+
+# Root level files (duplicates of package)
+/lra
+/config.py
+/feature_manager.py
+/status_manager.py
+/spec_manager.py
+/records_manager.py
+/operation_logger.py
+/upgrade_manager.py
+/code_checker.py
+/progress_tracker.py
+/session_manager.py
+/session_orchestrator.py
+/registry.py
+/resource_coordinator.py
+/init.sh.template
+/.long-run-agent/
