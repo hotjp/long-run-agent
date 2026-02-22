@@ -317,6 +317,97 @@ class LRACLI:
                 print(f"\n⚠️  {validation['warning']}")
                 print(f"   {validation.get('suggestion', '')}")
 
+    # ==================== LLM 上下文 ====================
+
+    def llm_context(self):
+        """输出 AI 上下文（精简版，供 LLM 使用）"""
+        print(f"""# LRA (Long-Running Agent) v{CURRENT_VERSION} - AI Context
+
+## 核心概念
+- **Feature**: 一个开发任务，ID 格式 `feature_N` (N 为数字)
+- **Spec**: 需求文档，存放在 `.long-run-agent/specs/feature_N.md`
+- **Status**: Feature 状态流转
+
+## 状态流转
+```
+pending → in_progress → testing → completed
+                  ↘ blocked → in_progress
+```
+
+## 命令速查
+| 命令 | 用途 |
+|------|------|
+| `lra init` | 初始化项目（交互式） |
+| `lra feature create "标题"` | 创建 Feature |
+| `lra feature list` | 列出 Features |
+| `lra feature status <id> --set <status>` | 修改状态 |
+| `lra spec create <id>` | 创建需求文档 |
+| `lra spec validate <id>` | 校验需求完整性 |
+| `lra records --feature <id>` | 查看代码变更记录 |
+| `lra code check <path>` | 语法检查 |
+| `lra git --feature <id>` | Git 信息+分支校验 |
+
+## 最佳实践（必读）
+
+### 1. 开发流程
+```
+lra feature create "功能描述"
+lra spec create feature_N --title "详细标题"
+# 编辑 .long-run-agent/specs/feature_N.md 填写需求
+lra spec validate feature_N  # 校验完整性
+lra feature status feature_N --set in_progress
+# ... 编码 ...
+lra records --feature feature_N  # 记录变更
+lra feature status feature_N --set testing
+# ... 测试 ...
+lra feature status feature_N --set completed
+```
+
+### 2. 需求文档结构
+Spec 文件必须包含以下章节：
+- **背景**: 为什么需要这个功能
+- **目标**: 要达成什么效果
+- **方案**: 具体实现思路
+- **步骤**: 分步实施计划
+
+### 3. 禁止操作
+- ❌ 不要跳过 spec 直接编码
+- ❌ 不要跳过状态直接标记 completed
+- ❌ 不要创建不符合 `feature_N` 格式的 ID
+- ❌ 不要在 testing 状态前标记 completed
+
+### 4. 每次提交后
+```bash
+lra records --feature <id> --format brief
+```
+
+### 5. 状态含义
+| 状态 | 含义 |
+|------|------|
+| pending | 待处理，未开始 |
+| in_progress | 开发中 |
+| blocked | 被阻塞，需外部依赖 |
+| testing | 测试中 |
+| completed | 已完成 |
+
+## 常见错误
+1. **项目未初始化**: 先运行 `lra init`
+2. **Feature ID 格式错误**: 必须是 `feature_N` 格式
+3. **状态跳过**: 不能直接从 pending → completed
+4. **Spec 不完整**: 运行 `lra spec validate` 检查
+
+## 数据位置
+```
+.long-run-agent/
+├── config.json          # 项目配置
+├── feature_list.json    # Feature 列表
+├── specs/               # 需求文档
+│   └── feature_N.md
+├── records/             # 代码变更记录
+└── operation_log.json   # 操作日志
+```
+""")
+
     # ==================== 原有命令 ====================
 
     def project_register(self, path: str, name: str = None):
@@ -447,6 +538,7 @@ def main():
     # ========== 其他 ==========
     subparsers.add_parser("stats", help="显示统计")
     subparsers.add_parser("statuses", help="列出所有状态")
+    subparsers.add_parser("llm-context", help="输出 AI 上下文（供 LLM 使用）")
 
     args = parser.parse_args()
 
@@ -524,6 +616,9 @@ def main():
             print(f"{status['emoji']} {status['id']}: {status['name']}")
             print(f"   {status['description']}")
             print()
+
+    elif args.command == "llm-context":
+        cli.llm_context()
 
 
 if __name__ == "__main__":

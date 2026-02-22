@@ -14,7 +14,7 @@ try:
     from .config import Config, SafeJson, CURRENT_VERSION, SCHEMA_VERSION, FileLock
 except ImportError:
     print("警告: 无法导入 config 模块")
-    CURRENT_VERSION = "2.0.6"
+    CURRENT_VERSION = "2.0.7"
     SCHEMA_VERSION = "2026-02-21"
 
 
