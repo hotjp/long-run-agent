@@ -65,6 +65,7 @@ class KeyInput:
     DOWN = '\x1b[B'
     ENTER = '\r'
     ENTER_ALT = '\n'
+    ESC = '\x1b'  # ESC 键
     
     @classmethod
     def is_tty(cls) -> bool:
@@ -84,6 +85,8 @@ class KeyInput:
                     return cls.UP
                 elif ch == b'P':
                     return cls.DOWN
+            elif ch == b'\x1b':  # ESC
+                return cls.ESC
             return ch.decode('utf-8', errors='ignore')
         
         # Unix/Linux/macOS
@@ -97,9 +100,16 @@ class KeyInput:
             tty.setraw(fd)
             ch = sys.stdin.read(1)
             
-            # 处理方向键 (ESC [ A/B)
+            # 处理 ESC 键或方向键 (ESC [ A/B)
             if ch == '\x1b':
-                ch += sys.stdin.read(2)
+                # 检查是否有后续字符（方向键）
+                # 设置非阻塞读取
+                import select
+                if select.select([sys.stdin], [], [], 0.1)[0]:
+                    ch += sys.stdin.read(2)
+                else:
+                    # 单独的 ESC 键
+                    return cls.ESC
             
             return ch
         finally:
@@ -141,6 +151,9 @@ class KeyInput:
                 selected = (selected + 1) % len(options)
             elif key in [cls.ENTER, cls.ENTER_ALT]:
                 return selected
+            elif key == cls.ESC:
+                # ESC 键退出
+                raise KeyboardInterrupt()
             elif key in ['1', '2', '3', '4', '5']:
                 idx = int(key) - 1
                 if 0 <= idx < len(options):
@@ -164,7 +177,7 @@ class KeyInput:
                 print(f"       {display_opt}")
         
         print()
-        print(f"  {C.DIM}↑↓ 切换选项  |  回车确认{C.RESET}")
+        print(f"  {C.DIM}↑↓ 切换  |  回车确认  |  ESC/Ctrl+C 退出{C.RESET}")
 
 
 # ============== UI 组件（无边框版） ==============
@@ -387,13 +400,7 @@ class LRAInstaller:
     def show_welcome(self):
         """欢迎界面"""
         UI.blank()
-        # LRA ASCII Art - 简洁版
-        print(f"  {C.BOLD}{C.CYAN}██╗      ██████╗  █████╗ ██████╗ {C.RESET}")
-        print(f"  {C.BOLD}{C.CYAN}██║     ██╔═══██╗██╔══██╗██╔══██╗{C.RESET}")
-        print(f"  {C.BOLD}{C.CYAN}██║     ██║   ██║███████║██║  ██║{C.RESET}")
-        print(f"  {C.BOLD}{C.CYAN}██║     ██║   ██║██╔══██║██║  ██║{C.RESET}")
-        print(f"  {C.BOLD}{C.CYAN}███████╗╚██████╔╝██║  ██║██████╔╝{C.RESET}")
-        print(f"  {C.BOLD}{C.CYAN}╚══════╝ ╚═════╝ ╚═╝  ╚═╝╚═════╝ {C.RESET}")
+        print(f"  {C.BOLD}{C.CYAN}LRA{C.RESET}")
         UI.blank()
         print(f"  {C.BOLD}{self.T['welcome']}{C.RESET}")
         print(f"  {C.DIM}{self.T['tagline']}{C.RESET}")

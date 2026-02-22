@@ -14,7 +14,7 @@ try:
     from .config import Config, SafeJson, CURRENT_VERSION, SCHEMA_VERSION, FileLock
 except ImportError:
     print("警告: 无法导入 config 模块")
-    CURRENT_VERSION = "2.0.0"
+    CURRENT_VERSION = "2.0.6"
     SCHEMA_VERSION = "2026-02-21"
 
 
@@ -26,6 +26,27 @@ class UpgradeManager:
         self.metadata_dir = os.path.join(self.project_path, Config.METADATA_DIR)
         self.config_path = os.path.join(self.metadata_dir, Config.CONFIG_FILE)
         self.backup_dir = os.path.join(self.metadata_dir, Config.BACKUP_DIR)
+
+    def _parse_version(self, version: str) -> Tuple[int, int, int]:
+        """解析版本号为 (major, minor, patch)"""
+        try:
+            parts = version.split(".")
+            major = int(parts[0]) if len(parts) > 0 else 0
+            minor = int(parts[1]) if len(parts) > 1 else 0
+            patch = int(parts[2]) if len(parts) > 2 else 0
+            return (major, minor, patch)
+        except:
+            return (0, 0, 0)
+
+    def _is_compatible_version(self, old_version: str, new_version: str) -> bool:
+        """
+        检查两个版本是否数据格式兼容
+        规则：major.minor 相同时，patch 版本差异不触发升级（数据格式兼容）
+        例如：2.0.0 和 2.0.6 兼容，2.0.x 和 2.1.x 不兼容
+        """
+        old_tuple = self._parse_version(old_version)
+        new_tuple = self._parse_version(new_version)
+        return old_tuple[0] == new_tuple[0] and old_tuple[1] == new_tuple[1]
 
     def check_version(self) -> Tuple[bool, Optional[str], Optional[Dict[str, Any]]]:
         """
@@ -40,18 +61,54 @@ class UpgradeManager:
             return True, None, None
 
         current_version = config.get("version", "1.0")
+
+        # 检查是否需要升级（小版本差异不触发）
         if current_version != CURRENT_VERSION:
+            if self._is_compatible_version(current_version, CURRENT_VERSION):
+                # 兼容版本，只更新版本号，不触发升级流程
+                config["version"] = CURRENT_VERSION
+                SafeJson.write(self.config_path, config)
+                return False, current_version, config
             return True, current_version, config
 
         return False, current_version, config
 
-    def create_backup(self, reason: str = "upgrade") -> Optional[str]:
+    def _find_existing_backup(self, reason: str = "upgrade") -> Optional[str]:
+        """
+        查找今天已存在的同类型备份
+        返回备份路径，如果不存在返回 None
+        """
+        if not os.path.exists(self.backup_dir):
+            return None
+
+        today_prefix = datetime.now().strftime("%Y%m%d_")
+
+        try:
+            for name in os.listdir(self.backup_dir):
+                if name.startswith(today_prefix) and reason in name:
+                    backup_path = os.path.join(self.backup_dir, name)
+                    if os.path.isdir(backup_path):
+                        return backup_path
+        except Exception:
+            pass
+
+        return None
+
+    def create_backup(self, reason: str = "upgrade", force: bool = False) -> Optional[str]:
         """
         创建备份
         返回备份目录路径
+        force: 是否强制创建（忽略已存在的备份）
         """
         if not os.path.exists(self.metadata_dir):
             return None
+
+        # 检查是否已有今天的同类型备份
+        if not force:
+            existing = self._find_existing_backup(reason)
+            if existing:
+                print(f"✓ 使用已有备份: {existing}")
+                return existing
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_name = f"{timestamp}_{reason}"
