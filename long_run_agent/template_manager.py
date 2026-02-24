@@ -1,15 +1,22 @@
 #!/usr/bin/env python3
 """
 模板管理器
-v3.1 - 可配置模板系统
+v3.2 - Jinja2 模板引擎支持
 """
 
 import os
 import yaml
-from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime
+from typing import Dict, Any, Optional, List, Tuple
 
 from .config import Config, SafeJson
+
+try:
+    import jinja2
+
+    JINJA2_AVAILABLE = True
+except ImportError:
+    JINJA2_AVAILABLE = False
 
 
 class TemplateManager:
@@ -34,13 +41,18 @@ class TemplateManager:
         return {
             "name": "task",
             "description": "通用任务模板",
-            "version": "1.0",
+            "version": "2.0",
+            "template_engine": "jinja2",
             "keywords": [],
-            "structure": """# {id}
+            "structure": """# {{ id }}
 
 ## 描述
 
+{{ description }}
+
 ## 交付物
+
+<!-- 请列出交付物 -->
 """,
             "states": ["pending", "in_progress", "completed"],
             "transitions": {
@@ -55,9 +67,10 @@ class TemplateManager:
         return {
             "name": "novel-chapter",
             "description": "小说章节模板",
-            "version": "1.0",
+            "version": "2.0",
+            "template_engine": "jinja2",
             "keywords": ["小说", "章节", "故事", "叙述", "chapter", "novel", "写作", "情节"],
-            "structure": """# {title}
+            "structure": """# {{ title }}
 
 ## 场景
 
@@ -88,7 +101,8 @@ class TemplateManager:
         return {
             "name": "code-module",
             "description": "代码模块开发模板",
-            "version": "1.0",
+            "version": "2.0",
+            "template_engine": "jinja2",
             "keywords": [
                 "接口",
                 "函数",
@@ -101,22 +115,38 @@ class TemplateManager:
                 "代码",
                 "code",
             ],
-            "structure": """# {id}
+            "structure": """# {{ id }}
 
 ## 概述
 
-<!-- 功能概述 -->
+{{ description }}
+
+## 技术栈
+
+{% if tech_stack %}
+{{ tech_stack }}
+{% else %}
+<!-- 请指定技术栈 -->
+{% endif %}
 
 ## 输入输出
 
 ### 输入
 ```
+{% if input_params %}
+{{ input_params }}
+{% else %}
 <!-- 参数定义 -->
+{% endif %}
 ```
 
 ### 输出
 ```
+{% if output_return %}
+{{ output_return }}
+{% else %}
 <!-- 返回值定义 -->
+{% endif %}
 ```
 
 ## 实现方案
@@ -141,13 +171,18 @@ class TemplateManager:
         return {
             "name": "data-pipeline",
             "description": "数据处理流程模板",
-            "version": "1.0",
+            "version": "2.0",
+            "template_engine": "jinja2",
             "keywords": ["数据", "采集", "清洗", "分析", "ETL", "pipeline", "data", "处理", "转换"],
-            "structure": """# {id}
+            "structure": """# {{ id }}
 
 ## 数据源
 
+{% if data_source %}
+{{ data_source }}
+{% else %}
 <!-- 数据来源说明 -->
+{% endif %}
 
 ## 处理步骤
 1. 
@@ -225,9 +260,10 @@ class TemplateManager:
             data = {
                 "name": name,
                 "description": "自定义模板",
-                "version": "1.0",
+                "version": "2.0",
+                "template_engine": "jinja2",
                 "keywords": [],
-                "structure": f"# {{id}}\n\n## 描述\n\n## 交付物\n",
+                "structure": f"# {{{{ id }}}}\n\n## 描述\n\n{{{{ description }}}}\n\n## 交付物\n",
                 "states": ["pending", "in_progress", "completed"],
                 "transitions": {
                     "pending": ["in_progress"],
@@ -289,15 +325,24 @@ class TemplateManager:
         return to_state in allowed
 
     def create_task_file(
-        self, task_id: str, template_name: str, title: str = ""
+        self, task_id: str, template_name: str, title: str = "", variables: Dict[str, Any] = None
     ) -> Tuple[bool, str]:
         template = self.load_template(template_name)
         if not template:
             template = self.load_template("task")
 
-        structure = template.get("structure", "# {id}\n\n## 描述\n")
-        structure = structure.replace("{id}", task_id)
-        structure = structure.replace("{title}", title or task_id)
+        if not template:
+            return False, "template_not_found"
+
+        engine = template.get("template_engine", "jinja2")
+        structure = template.get("structure", "# {{ id }}\n\n## 描述\n")
+
+        if engine == "jinja2":
+            if not JINJA2_AVAILABLE:
+                return False, "jinja2_not_installed"
+            structure = self._render_jinja2(structure, task_id, title, variables)
+        else:
+            structure = self._render_simple(structure, task_id, title)
 
         tasks_dir = Config.get_tasks_dir()
         os.makedirs(tasks_dir, exist_ok=True)
@@ -309,3 +354,28 @@ class TemplateManager:
             return True, path
         except Exception as e:
             return False, str(e)
+
+    def _render_jinja2(
+        self, template_str: str, task_id: str, title: str, variables: Dict[str, Any] = None
+    ) -> str:
+        """使用 Jinja2 渲染模板"""
+        env = jinja2.Environment()
+        tpl = env.from_string(template_str)
+
+        context = {
+            "id": task_id,
+            "title": title or task_id,
+            "description": title,
+            "created_at": datetime.now().isoformat(),
+            "variables": variables or {},
+        }
+
+        # 支持直接访问 variables 中的字段
+        if variables:
+            context.update(variables)
+
+        return tpl.render(**context)
+
+    def _render_simple(self, template_str: str, task_id: str, title: str) -> str:
+        """简单字符串替换（向后兼容）"""
+        return template_str.replace("{id}", task_id).replace("{title}", title or task_id)

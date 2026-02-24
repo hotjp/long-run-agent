@@ -287,6 +287,21 @@ class LocksManager:
         data = self._load()
         locks = data.get("locks", {})
 
+        task = self.task_manager.get(task_id)
+        if not task:
+            return False, "task_not_found"
+
+        # 检查 blocked 状态
+        if task.get("status") == "blocked":
+            return False, "task_blocked"
+
+        # 检查依赖是否满足
+        dependencies = task.get("dependencies", [])
+        if dependencies:
+            dependency_type = task.get("dependency_type", "all")
+            if not self._check_dependencies_satisfied(dependencies, dependency_type):
+                return False, "dependencies_not_satisfied"
+
         parent_id = self._get_parent_id(task_id)
         if parent_id:
             parent_lock = locks.get(parent_id)
@@ -309,3 +324,20 @@ class LocksManager:
             return True, "ok_resumable"
 
         return True, "ok"
+
+    def _check_dependencies_satisfied(self, dependencies: List[str], dependency_type: str) -> bool:
+        """检查依赖是否满足（简化版，仅检查状态）"""
+        completed = []
+        for dep_id in dependencies:
+            dep_task = self.task_manager.get(dep_id)
+            if not dep_task:
+                continue
+
+            status = dep_task.get("status", "pending")
+            if status in ["completed", "success", "finalized"]:
+                completed.append(dep_id)
+
+        if dependency_type == "all":
+            return len(completed) == len(dependencies)
+        else:  # any
+            return len(completed) > 0

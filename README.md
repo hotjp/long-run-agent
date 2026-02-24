@@ -1,18 +1,24 @@
-# LRA - AI Agent Task Manager v3.1
+# LRA - AI Agent Task Manager v3.2
 
 **通用 AI Agent 任务管理框架**
 
 ## 核心特性
 
 - **通用任务模型**：支持软件开发、小说写作、数据处理等多种场景
-- **可配置模板**：YAML 模板定义任务结构、状态流转、验收标准
+- **Jinja2 模板**：强大的模板引擎，支持条件/循环语法
+- **任务依赖**：DAG 依赖关系，自动解锁完成的任务
+- **优先级调度**：P0-P3 优先级，Agent 自评
 - **多 Agent 协作**：层级锁机制，支持大模型拆分任务、小模型并行开发
 - **输出限制感知**：根据模型输出能力推荐/拆分任务
 
 ## 安装
 
 ```bash
+# 基础安装
 pip install long-run-agent
+
+# 完整安装（包含 Jinja2 模板引擎）
+pip install long-run-agent[full]
 ```
 
 ## 快速开始
@@ -55,7 +61,21 @@ lra context --output-limit 8k
 |------|------|
 | `lra template list` | 列出模板 |
 | `lra template show <name>` | 查看模板详情 |
-| `lra template create <name> [--from X]` | 创建模板 |
+| `lra template create <name>` | 创建模板 |
+
+### 依赖命令
+
+| 命令 | 用途 |
+|------|------|
+| `lra deps <id>` | 查看任务依赖 |
+| `lra deps <id> --dependents` | 查看依赖此任务的其他任务 |
+| `lra check-blocked` | 检查并解锁 blocked 任务 |
+
+### 优先级命令
+
+| 命令 | 用途 |
+|------|------|
+| `lra set-priority <id> <P0\|P1\|P2\|P3>` | 设置任务优先级 |
 
 ## 内置模板
 
@@ -112,13 +132,22 @@ lra context --output-limit 8k
 # .long-run-agent/templates/my-template.yaml
 name: my-template
 description: 我的自定义模板
-version: "1.0"
-keywords: [关键词1, 关键词2]
+version: "2.0"
+template_engine: jinja2  # 使用 Jinja2 引擎
 
 structure: |
-  # {id}
+  # {{ id }}
+  
   ## 描述
+  {{ description }}
+  
+  {% if tech_stack %}
+  ## 技术栈
+  {{ tech_stack }}
+  {% endif %}
+  
   ## 交付物
+  <!-- 请列出交付物 -->
 
 states:
   - pending
@@ -131,9 +160,40 @@ transitions:
   done: []
 
 acceptance:
-  - 验收标准1
-  - 验收标准2
+  - 验收标准 1
+  - 验收标准 2
 ```
+
+## 创建任务示例
+
+```bash
+# 基础创建
+lra create "实现用户登录"
+
+# 带优先级
+lra create "紧急 Bug 修复" --priority P0
+
+# 带依赖
+lra create "集成测试" --dependencies task_001,task_002 --dependency-type all
+
+# 带截止时间
+lra create "发布版本" --deadline "2026-02-28T23:59:59"
+
+# 带模板变量
+lra create "API 开发" --template code-module \
+  --variables '{"tech_stack": "FastAPI", "input_params": "user_id"}'
+```
+
+## 状态说明
+
+| 状态 | 说明 |
+|------|------|
+| `blocked` | 依赖未完成，不可领取 |
+| `pending` | 初始状态，可领取 |
+| `in_progress` | 进行中 |
+| `completed` | 完成（终态） |
+
+**blocked 状态自动解锁**：当依赖的任务完成后，blocked 任务会自动变为 pending 状态。
 
 ## 环境要求
 

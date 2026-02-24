@@ -11,11 +11,14 @@ import subprocess
 from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime
 
-CURRENT_VERSION = "3.1.0"
-SCHEMA_VERSION = "2026-02-24"
+CURRENT_VERSION = "3.2.0"
+SCHEMA_VERSION = "2026-02-25"
 
 HEARTBEAT_INTERVAL_MINUTES = 5
 ORPHAN_THRESHOLD_MINUTES = 15
+
+# 优先级权重
+PRIORITY_WEIGHTS = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
 
 
 class Config:

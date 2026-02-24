@@ -8,6 +8,7 @@ import os
 import sys
 import json
 import argparse
+from datetime import datetime
 from typing import Any, Dict, List
 
 from .config import CURRENT_VERSION, Config, validate_project_initialized
@@ -18,7 +19,7 @@ from .locks_manager import LocksManager
 
 
 AGENT_GUIDE = """
-LRA - AI Agent Task Manager v3.1
+LRA - AI Agent Task Manager v3.2
 
 ## QUICK START
 $ lra context --output-limit 8k
@@ -27,14 +28,14 @@ $ lra context --output-limit 8k
 lra init --name <name>         Initialize project
 lra context [--output-limit 4k|8k|16k|32k|128k]
 lra list [--status X] [--template X]
-lra create <desc> --template <name> [--output-req 8k]
+lra create <desc> --template <name> [opts]
 lra show <id>                  Task details
-lra set <id> <status>          Update status (constrained by template)
-lra split <id> --plan '<json>' Split task (model provides plan)
+lra set <id> <status>          Update status
+lra split <id> --plan '<json>' Split task
 
 ## LOCK COMMANDS
-lra claim <id>                 Claim task (locks self + children)
-lra publish <id>               Release children for others to claim
+lra claim <id>                 Claim task
+lra publish <id>               Release children
 lra pause <id> [--note]        Pause + checkpoint
 lra resume <id>                View checkpoint
 lra checkpoint <id> [--note]   Save progress
@@ -43,26 +44,33 @@ lra heartbeat <id>             Keep-alive (every 5min)
 ## TEMPLATE COMMANDS
 lra template list              List templates
 lra template show <name>       Template details
-lra template create <name> [--from <template>]
+lra template create <name>     Create template
 
-## RECORD COMMANDS
-lra record <id> [--auto]       Record changes
+## DEPENDENCY COMMANDS
+lra deps <id>                  View task dependencies
+lra deps <id> --dependents     View tasks depending on this
+lra check-blocked              Check and unblock tasks
+
+## PRIORITY COMMANDS
+lra set-priority <id> <P0|P1|P2|P3>
+
+## CREATE TASK OPTIONS
+--dependencies task_001,task_002  Depend on other tasks
+--dependency-type all|any        All or any dependency
+--deadline 2026-02-25T12:00:00   Deadline
+--priority P0|P1|P2|P3          Priority
+--variables '{"key": "val"}'     Template variables
 
 ## STATUS FLOW
-Status transitions are defined by template.
-Use 'lra template show <name>' to see allowed transitions.
+- blocked: Waiting for dependencies
+- pending: Ready to claim
+- in_progress: Being worked on
+- completed: Done (final state)
 
 ## MULTI-AGENT
-- claim = exclusive lock on task + children
-- publish = release children locks for parallel work
+- claim = exclusive lock
+- publish = release children
 - orphaned (no heartbeat 15min) = can be claimed
-
-## OUTPUT LIMIT
-Match your model's output capability:
---output-limit 4k   (GPT-4o-mini)
---output-limit 8k   (Claude 3.5)
---output-limit 16k  (Claude 3.5 Sonnet)
---output-limit 128k (Claude 3.5 Sonnet max)
 
 ## JSON OUTPUT
 All commands support --json flag
@@ -142,11 +150,29 @@ class LRACLI:
         priority: str = "P1",
         output_req: str = "8k",
         parent: str = None,
+        dependencies: str = None,
+        dependency_type: str = "all",
+        deadline: str = None,
+        variables: str = None,
         json_mode: bool = False,
     ):
         if not self._check_project():
             output({"error": "not_initialized"}, json_mode)
             return
+
+        # 解析依赖
+        deps = []
+        if dependencies:
+            deps = [d.strip() for d in dependencies.split(",")]
+
+        # 解析变量
+        vars_dict = {}
+        if variables:
+            try:
+                vars_dict = json.loads(variables)
+            except:
+                output({"error": "invalid_variables_json"}, json_mode)
+                return
 
         success, result = self.task_manager.create(
             description=description,
@@ -154,6 +180,10 @@ class LRACLI:
             priority=priority,
             parent_id=parent,
             output_req=output_req,
+            dependencies=deps,
+            deadline=deadline,
+            dependency_type=dependency_type,
+            variables=vars_dict if vars_dict else None,
         )
         if success:
             output({"ok": True, "task": result}, json_mode)
@@ -295,6 +325,85 @@ class LRACLI:
         success, msg = self.template_manager.delete_template(name)
         output({"ok": success, "message": msg}, json_mode)
 
+    def cmd_deps(self, task_id: str, dependents: bool = False, json_mode: bool = False):
+        """查看任务依赖"""
+        if not self._check_project():
+            output({"error": "not_initialized"}, json_mode)
+            return
+
+        task = self.task_manager.get(task_id)
+        if not task:
+            output({"error": "not_found"}, json_mode)
+            return
+
+        if dependents:
+            # 查找依赖此任务的任务
+            all_tasks = self.task_manager.list_all()
+            dependents_list = [
+                {"id": t["id"], "description": t.get("description", "")[:50]}
+                for t in all_tasks
+                if task_id in t.get("dependencies", [])
+            ]
+            output({"task_id": task_id, "dependents": dependents_list}, json_mode)
+        else:
+            # 查看此任务依赖的其他任务
+            dependencies = task.get("dependencies", [])
+            dep_details = []
+            for dep_id in dependencies:
+                dep_task = self.task_manager.get(dep_id)
+                if dep_task:
+                    dep_details.append(
+                        {
+                            "id": dep_id,
+                            "status": dep_task.get("status", "unknown"),
+                            "description": dep_task.get("description", "")[:50],
+                        }
+                    )
+            output(
+                {
+                    "task_id": task_id,
+                    "dependency_type": task.get("dependency_type", "all"),
+                    "dependencies": dep_details,
+                },
+                json_mode,
+            )
+
+    def cmd_check_blocked(self, json_mode: bool = False):
+        """检查并解锁 blocked 任务"""
+        if not self._check_project():
+            output({"error": "not_initialized"}, json_mode)
+            return
+
+        unblocked = self.task_manager.check_blocked_tasks()
+        output({"ok": True, "unblocked": unblocked}, json_mode)
+
+    def cmd_set_priority(self, task_id: str, priority: str, json_mode: bool = False):
+        """设置任务优先级"""
+        if not self._check_project():
+            output({"error": "not_initialized"}, json_mode)
+            return
+
+        task = self.task_manager.get(task_id)
+        if not task:
+            output({"error": "not_found"}, json_mode)
+            return
+
+        # 直接更新任务数据
+        data = self.task_manager._load()
+        if not data:
+            output({"error": "not_initialized"}, json_mode)
+            return
+
+        for t in data.get("tasks", []):
+            if t.get("id") == task_id:
+                t["priority"] = priority
+                t["updated_at"] = datetime.now().isoformat()
+                self.task_manager._save(data)
+                output({"ok": True, "task_id": task_id, "priority": priority}, json_mode)
+                return
+
+        output({"error": "not_found"}, json_mode)
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -323,9 +432,13 @@ def main():
     create_p = subparsers.add_parser("create", help="Create task")
     create_p.add_argument("description")
     create_p.add_argument("--template", default="task")
-    create_p.add_argument("--priority", default="P1", choices=["P0", "P1", "P2"])
+    create_p.add_argument("--priority", default="P1", choices=["P0", "P1", "P2", "P3"])
     create_p.add_argument("--output-req", default="8k")
     create_p.add_argument("--parent", default=None)
+    create_p.add_argument("--dependencies", default=None, help="Comma-separated task IDs")
+    create_p.add_argument("--dependency-type", default="all", choices=["all", "any"])
+    create_p.add_argument("--deadline", default=None)
+    create_p.add_argument("--variables", default=None, help="JSON string of template variables")
 
     # show
     subparsers.add_parser("show", help="Show task").add_argument("task_id")
@@ -382,6 +495,21 @@ def main():
     subparsers.add_parser("guide", help="Show agent guide")
     subparsers.add_parser("version", help="Show version")
 
+    # deps
+    deps_p = subparsers.add_parser("deps", help="View task dependencies")
+    deps_p.add_argument("task_id")
+    deps_p.add_argument(
+        "--dependents", action="store_true", help="Show tasks that depend on this task"
+    )
+
+    # check-blocked
+    subparsers.add_parser("check-blocked", help="Check and unblock blocked tasks")
+
+    # set-priority
+    sp_p = subparsers.add_parser("set-priority", help="Set task priority")
+    sp_p.add_argument("task_id")
+    sp_p.add_argument("priority", choices=["P0", "P1", "P2", "P3"])
+
     args = parser.parse_args()
     json_mode = getattr(args, "json", False)
     cli = LRACLI()
@@ -394,7 +522,16 @@ def main():
         cli.cmd_list(args.status, args.template, json_mode)
     elif args.command == "create":
         cli.cmd_create(
-            args.description, args.template, args.priority, args.output_req, args.parent, json_mode
+            args.description,
+            args.template,
+            args.priority,
+            args.output_req,
+            args.parent,
+            args.dependencies,
+            args.dependency_type,
+            args.deadline,
+            args.variables,
+            json_mode,
         )
     elif args.command == "show":
         cli.cmd_show(args.task_id, json_mode)
@@ -431,6 +568,12 @@ def main():
         print(AGENT_GUIDE)
     elif args.command == "version":
         output({"version": CURRENT_VERSION}, json_mode)
+    elif args.command == "deps":
+        cli.cmd_deps(args.task_id, args.dependents, json_mode)
+    elif args.command == "check-blocked":
+        cli.cmd_check_blocked(json_mode)
+    elif args.command == "set-priority":
+        cli.cmd_set_priority(args.task_id, args.priority, json_mode)
     else:
         parser.print_help()
 
