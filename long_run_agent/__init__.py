@@ -1,39 +1,25 @@
 """
-Long-Running Agent - A powerful framework for managing long-running AI Agent tasks
+LRA - AI Agent Task Manager v3.1
 """
 
-__version__ = "2.0.6"
-__author__ = "Long-Running Agent Contributors"
+__version__ = "3.1.0"
+__author__ = "LRA Contributors"
 
-from .config import Config, SafeJson
-from .status_manager import StatusManager, FeatureStatus, VALID_TRANSITIONS
-from .spec_manager import SpecManager
+from .config import Config, SafeJson, GitHelper, CURRENT_VERSION
+from .task_manager import TaskManager
+from .template_manager import TemplateManager
 from .records_manager import RecordsManager
-from .operation_logger import OperationLogger
-from .upgrade_manager import UpgradeManager
-from .code_checker import CodeChecker
-
-# Functional exports
-from .feature_manager import init_project, add_feature, list_features, get_next_feature, update_feature_status, get_feature_stats
+from .locks_manager import LocksManager, LockStatus
 
 __all__ = [
     "__version__",
-    # Classes
+    "CURRENT_VERSION",
     "Config",
     "SafeJson",
-    "StatusManager",
-    "FeatureStatus",
-    "VALID_TRANSITIONS",
-    "SpecManager",
+    "GitHelper",
+    "TaskManager",
+    "TemplateManager",
     "RecordsManager",
-    "OperationLogger",
-    "UpgradeManager",
-    "CodeChecker",
-    # Functions
-    "init_project",
-    "add_feature",
-    "list_features",
-    "get_next_feature",
-    "update_feature_status",
-    "get_feature_stats",
+    "LocksManager",
+    "LockStatus",
 ]

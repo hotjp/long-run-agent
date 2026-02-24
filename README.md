@@ -1,22 +1,13 @@
-<div align="center">
+# LRA - AI Agent Task Manager v3.1
 
-# LRA - Long-Running Agent Tool
+**通用 AI Agent 任务管理框架**
 
-**一个强大的长时 AI Agent 任务管理框架**
+## 核心特性
 
-基于 Anthropic 论文 [Effective Harnesses for Long-Running Agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents) 的最佳实践实现。
-
-[![PyPI version](https://img.shields.io/pypi/v/long-run-agent.svg)](https://pypi.org/project/long-run-agent/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://www.python.org/)
-
-**[English](#english) | [中文](#中文)**
-
-</div>
-
----
-
-# 中文
+- **通用任务模型**：支持软件开发、小说写作、数据处理等多种场景
+- **可配置模板**：YAML 模板定义任务结构、状态流转、验收标准
+- **多 Agent 协作**：层级锁机制，支持大模型拆分任务、小模型并行开发
+- **输出限制感知**：根据模型输出能力推荐/拆分任务
 
 ## 安装
 
@@ -24,248 +15,132 @@
 pip install long-run-agent
 ```
 
-**安装后，运行初始化：**
+## 快速开始
 
 ```bash
-python3 -m long_run_agent
+# 初始化项目
+cd /your/project
+lra init --name "My Project"
+
+# Agent 获取上下文
+lra context --output-limit 8k
 ```
 
-这会启动交互式安装向导：
-- 🌐 语言选择（中文/英文）- **方向键切换，回车确认**
-- 🔧 自动配置 PATH 环境变量
-- ✅ 配置完成后立即可用 `lra` 命令
-- 🤖 显示 AI Agent 引导提示词
+## 命令参考
 
-> 💡 **提示**：如果提示 `command not found`，请运行 `source ~/.zshrc` 或重新打开终端。
+### 核心命令
 
----
+| 命令 | 用途 |
+|------|------|
+| `lra context [--output-limit Xk]` | 获取项目状态 + 可领取任务 |
+| `lra list [--status X] [--template X]` | 列出任务 |
+| `lra create <desc> --template <name>` | 创建任务 |
+| `lra show <id>` | 任务详情 |
+| `lra set <id> <status>` | 更新状态（受模板约束） |
+| `lra split <id> --plan '<json>'` | 拆分任务（模型提供方案） |
 
-## 🤖 给 AI Agent 使用（30秒上手）
+### 锁命令
 
-**第一步：初始化项目**
+| 命令 | 用途 |
+|------|------|
+| `lra claim <id>` | 领取任务（锁定自己+子任务） |
+| `lra publish <id>` | 发布子任务（释放子任务锁） |
+| `lra pause <id>` | 暂停并保存快照 |
+| `lra resume <id>` | 查看快照 |
+| `lra heartbeat <id>` | 心跳保活（每5分钟） |
 
-```bash
-cd /path/to/your/project
-lra project create --name "我的项目"
-```
+### 模板命令
 
-**第二步：告诉 AI Agent**
+| 命令 | 用途 |
+|------|------|
+| `lra template list` | 列出模板 |
+| `lra template show <name>` | 查看模板详情 |
+| `lra template create <name> [--from X]` | 创建模板 |
 
-> **每次开始工作，先读取 `.long-run-agent/feature_list.json` 了解项目进度和待开发功能。完成后更新对应 Feature 的状态。**
+## 内置模板
 
-就这样！AI Agent 会自动拥有跨会话的项目记忆。
+| 模板 | 用途 | 状态 |
+|------|------|------|
+| `task` | 通用任务 | pending → in_progress → completed |
+| `novel-chapter` | 小说章节 | drafting → revising → finalized |
+| `code-module` | 代码模块 | pending → in_progress → pending_test → completed |
+| `data-pipeline` | 数据流程 | pending → running → success |
 
----
-
-## 快速命令
-
-```bash
-lra version                           # 查看版本
-lra project create --name "我的项目"   # 初始化项目
-lra feature create "登录功能" -p P0    # 创建功能
-lra feature list                      # 功能列表
-lra feature status <id> --set completed  # 标记完成
-lra stats                             # 项目统计
-```
-
----
-
-## 解决的问题
-
-| 挑战 | LRA 如何解决 |
-|------|-------------|
-| **上下文窗口限制** | 状态持久化，AI 随时可读 |
-| **过早完成** | 状态流转强制验证 |
-| **一次性做太多** | Feature 粒度拆分 |
-| **状态追踪困难** | `lra feature list` 一目了然 |
-| **需求文档混乱** | 标准模板 + 自动校验 |
-
----
-
-## 核心功能
-
-- 🔄 **自动升级** - 版本检测 + 数据迁移
-- 📋 **7 状态管理** - pending → completed 完整流转
-- 📝 **需求文档** - 标准模板 + 完整性校验
-- 📊 **代码变更记录** - 按 Feature 分文件存储
-- 📜 **操作审计** - 完整操作日志追溯
-- 🔀 **Git 集成** - Commit/Branch 自动关联
-
----
-
-## CLI 命令速查
-
-```bash
-# 初始化
-lra init                    # 安装向导
-lra version                 # 版本信息
-
-# 项目
-lra project create --name <name>
-lra project list
-
-# Feature
-lra feature create <title> [--priority P0|P1|P2]
-lra feature list
-lra feature status <id> [--set <status>]
-
-# 需求文档
-lra spec create <feature_id>
-lra spec validate <feature_id>
-lra spec list
-
-# 记录
-lra records --feature <id>
-lra records --file <path>
-
-# 其他
-lra stats / logs / code check / git / statuses
-```
-
----
-
-## 与 AI Agent 协作示例
+## 多 Agent 协作流程
 
 ```
-# 告诉 AI Agent：
-
-请读取 .long-run-agent/feature_list.json，告诉我：
-1. 当前有哪些 pending 状态的功能
-2. 哪些是 P0 优先级
-3. 继续开发哪个功能
-
-完成后更新状态：lra feature status <id> --set completed
+1. 大模型 claim task_001（整个模块）
+2. 大模型编写架构/接口契约
+3. 大模型 split task_001 --plan '[...]'
+4. 大模型 publish task_001（释放子任务锁）
+5. 小模型 context --output-limit 8k（获取可领取任务）
+6. 小模型 claim task_001_01（领取子任务）
+7. 小模型按契约开发
+8. 大模型验收/集成
 ```
 
----
+## 输出限制适配
+
+| 模型 | 输出限制 | 使用 |
+|------|----------|------|
+| GPT-4o-mini | 4K | `--output-limit 4k` |
+| Claude 3.5 | 8K | `--output-limit 8k` |
+| Claude 3.5 Sonnet | 16K | `--output-limit 16k` |
+| Claude 3.5 Sonnet Max | 128K | `--output-limit 128k` |
+
+## 数据结构
+
+```
+.long-run-agent/
+├── config.json          # 项目配置
+├── task_list.json       # 任务列表
+├── locks.json           # 任务锁
+├── templates/           # 模板（可自定义）
+│   ├── task.yaml
+│   ├── novel-chapter.yaml
+│   ├── code-module.yaml
+│   └── data-pipeline.yaml
+├── tasks/               # 任务文件
+│   └── task_001.md
+└── records/             # 变更记录
+    └── task_001.json
+```
+
+## 自定义模板
+
+```yaml
+# .long-run-agent/templates/my-template.yaml
+name: my-template
+description: 我的自定义模板
+version: "1.0"
+keywords: [关键词1, 关键词2]
+
+structure: |
+  # {id}
+  ## 描述
+  ## 交付物
+
+states:
+  - pending
+  - working
+  - done
+
+transitions:
+  pending: [working]
+  working: [done]
+  done: []
+
+acceptance:
+  - 验收标准1
+  - 验收标准2
+```
 
 ## 环境要求
 
-| 依赖 | 版本 |
-|------|------|
-| Python | ≥ 3.8 |
-| Git | ≥ 2.0（可选） |
-
----
+- Python ≥ 3.8
+- Git ≥ 2.0（可选）
 
 ## 链接
 
-- **GitHub**: https://github.com/hotjp/long-run-agent
-- **PyPI**: https://pypi.org/project/long-run-agent/
-- **问题反馈**: https://github.com/hotjp/long-run-agent/issues
-
----
-
-# English
-
-## Installation
-
-```bash
-pip install long-run-agent
-```
-
-**After installation, run the setup:**
-
-```bash
-python3 -m long_run_agent
-```
-
-This will:
-- 🌐 Let you choose language (Chinese/English)
-- 🔧 Auto-configure PATH environment variable
-- ✅ After setup, `lra` command is ready to use
-- 🤖 Display AI Agent guidance prompt
-
-> 💡 **Tip**: If you see `command not found`, run `source ~/.zshrc` or restart your terminal.
-
----
-
-## 🤖 For AI Agents (30 seconds)
-
-**Step 1: Initialize Project**
-
-```bash
-cd /path/to/your/project
-lra project create --name "My Project"
-```
-
-**Step 2: Tell Your AI Agent**
-
-> **At the start of each session, read `.long-run-agent/feature_list.json` to understand current progress and pending features. Update Feature status when done.**
-
-That's it! Your AI Agent now has cross-session project memory.
-
----
-
-## Quick Commands
-
-```bash
-lra version                            # Show version
-lra project create --name "My Project" # Initialize project
-lra feature create "Login" -p P0       # Create feature
-lra feature list                       # List features
-lra feature status <id> --set completed
-lra stats                              # Project statistics
-```
-
----
-
-## Core Features
-
-- 🔄 **Auto-upgrade** - Version detection + data migration
-- 📋 **7-state management** - pending → completed workflow
-- 📝 **Requirements docs** - Templates + validation
-- 📊 **Code change records** - Per-feature storage
-- 📜 **Operation audit** - Complete logs
-- 🔀 **Git integration** - Commit/Branch tracking
-
----
-
-## CLI Reference
-
-```bash
-# Init
-lra init / version
-
-# Project
-lra project create --name <name>
-lra project list
-
-# Feature
-lra feature create <title> [--priority P0|P1|P2]
-lra feature list / status <id>
-
-# Spec
-lra spec create / validate / list
-
-# Records
-lra records --feature <id> / --file <path>
-
-# Utils
-lra stats / logs / code check / git / statuses
-```
-
----
-
-## Requirements
-
-| Dependency | Version |
-|------------|---------|
-| Python | ≥ 3.8 |
-| Git | ≥ 2.0 (optional) |
-
----
-
-## Links
-
-- **GitHub**: https://github.com/hotjp/long-run-agent
-- **PyPI**: https://pypi.org/project/long-run-agent/
-- **Issues**: https://github.com/hotjp/long-run-agent/issues
-
----
-
-<div align="center">
-
-**Made with ❤️ for AI Agent Developers**
-
-</div>
+- GitHub: https://github.com/hotjp/long-run-agent
+- PyPI: https://pypi.org/project/long-run-agent/
