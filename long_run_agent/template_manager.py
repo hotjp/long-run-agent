@@ -46,6 +46,16 @@ class TemplateManager:
             "keywords": [],
             "structure": """# {{ id }}
 
+## ⚠️ 重要提示（Agent 必读）
+
+**当前位置**: `.long-run-agent/tasks/{{id}}.md`（任务描述文件）
+
+**工作目录**: 项目根目录（`.long-run-agent` 的同级目录）
+
+**产出物**: 请在项目根目录或适当子目录创建交付物
+
+**这是配置文件**，不是最终产出！
+
 ## 描述
 
 {{ description }}
@@ -71,6 +81,16 @@ class TemplateManager:
             "template_engine": "jinja2",
             "keywords": ["小说", "章节", "故事", "叙述", "chapter", "novel", "写作", "情节"],
             "structure": """# {{ title }}
+
+## ⚠️ 重要提示（Agent 必读）
+
+**当前位置**: `.long-run-agent/tasks/{{id}}.md`（任务描述文件）
+
+**工作目录**: 项目根目录（`.long-run-agent` 的同级目录）
+
+**产出物位置**: 请在 `novel/` 或项目根目录创建章节文件
+
+**不要**将作品内容写在这个文件里！
 
 ## 场景
 
@@ -116,6 +136,16 @@ class TemplateManager:
                 "code",
             ],
             "structure": """# {{ id }}
+
+## ⚠️ 重要提示（Agent 必读）
+
+**当前位置**: `.long-run-agent/tasks/{{id}}.md`（任务描述文件）
+
+**工作目录**: 项目根目录（`.long-run-agent` 的同级目录）
+
+**产出物位置**: 请在 `src/`、`tests/` 或适当位置创建代码文件
+
+**这是配置文件**，不是最终产出！
 
 ## 概述
 
@@ -175,6 +205,16 @@ class TemplateManager:
             "template_engine": "jinja2",
             "keywords": ["数据", "采集", "清洗", "分析", "ETL", "pipeline", "data", "处理", "转换"],
             "structure": """# {{ id }}
+
+## ⚠️ 重要提示（Agent 必读）
+
+**当前位置**: `.long-run-agent/tasks/{{id}}.md`（任务描述文件）
+
+**工作目录**: 项目根目录（`.long-run-agent` 的同级目录）
+
+**产出物位置**: 请在 `data/`、`notebooks/`、`src/` 或适当位置创建
+
+**这是配置文件**，不是最终产出！
 
 ## 数据源
 
