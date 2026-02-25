@@ -14,12 +14,14 @@
 ## 安装
 
 ```bash
-# 基础安装
+# 安装（自动包含 Jinja2）
 pip install long-run-agent
 
-# 完整安装（包含 Jinja2 模板引擎）
-pip install long-run-agent[full]
+# 开发环境
+pip install long-run-agent[dev]
 ```
+
+**注意**：v3.2.0+ Jinja2 已自动安装，无需额外操作。
 
 ## 快速开始
 

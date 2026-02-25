@@ -12,14 +12,8 @@ requires-python = ">=3.8"
 authors = [
     {name = "Long-Running Agent Contributors"}
 ]
-keywords = [
-    "ai",
-    "agent",
-    "llm",
-    "task-management",
-    "feature-tracking",
-    "development-tools",
-    "cli"
+dependencies = [
+    "jinja2>=3.0"
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -46,8 +40,7 @@ dev = [
     "ruff>=0.1.0",
     "mypy>=1.0",
 ]
-jinja2 = ["jinja2>=3.0"]
-full = ["jinja2>=3.0", "pytest>=7.0"]
+full = ["pytest>=7.0"]
 
 [project.scripts]
 lra = "long_run_agent.cli:main"
