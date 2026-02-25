@@ -11,7 +11,7 @@ import subprocess
 from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime
 
-CURRENT_VERSION = "3.2.0"
+CURRENT_VERSION = "3.3.0"
 SCHEMA_VERSION = "2026-02-25"
 
 HEARTBEAT_INTERVAL_MINUTES = 5

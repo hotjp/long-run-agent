@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "long-run-agent"
-version = "3.2.0"
+version = "3.3.0"
 description = "A powerful framework for managing long-running AI Agent tasks"
 readme = "README.md"
 license = {text = "MIT"}
@@ -13,7 +13,8 @@ authors = [
     {name = "Long-Running Agent Contributors"}
 ]
 dependencies = [
-    "jinja2>=3.0"
+    "jinja2>=3.0",
+    "pyyaml>=6.0",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -31,7 +32,6 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Utilities",
 ]
-dependencies = []
 
 [project.optional-dependencies]
 dev = [

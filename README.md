@@ -1,6 +1,6 @@
-# LRA - AI Agent Task Manager v3.2
+# LRA - AI Agent Task Manager v3.3
 
-**通用 AI Agent 任务管理框架**
+**通用 AI Agent 任务管理框架 - Agent 自治式初始化**
 
 ## 核心特性
 
@@ -10,6 +10,7 @@
 - **优先级调度**：P0-P3 优先级，Agent 自评
 - **多 Agent 协作**：层级锁机制，支持大模型拆分任务、小模型并行开发
 - **输出限制感知**：根据模型输出能力推荐/拆分任务
+- **🆕 Agent 自治初始化** (v3.3.0): 自动预检 + 增量处理 + 文档闭环
 
 ## 安装
 
@@ -196,6 +197,73 @@ lra create "API 开发" --template code-module \
 | `completed` | 完成（终态） |
 
 **blocked 状态自动解锁**：当依赖的任务完成后，blocked 任务会自动变为 pending 状态。
+
+## 🆕 v3.3.0 Agent 自治式初始化
+
+### 系统预检任务
+
+LRA v3.3.0 引入**自动化系统预检**，在首次创建任务时自动执行项目评估：
+
+**检测维度**：
+- ✅ 代码规模（≤5MB）
+- ✅ Git 提交规范性（≥30%）
+- ✅ 文档覆盖率（≥40%）
+- ✅ 函数注释占比（≥20%）
+
+**决策模式**：
+- **全量模式**（满足所有阈值）：生成完整任务树
+- **增量模式**（任意不满足）：仅允许创建模块级任务
+
+**使用方法**：
+```bash
+# 自动触发（首次创建任务时）
+lra create "支付模块开发"
+
+# 手动执行预检
+lra system-check
+
+# 查看预检报告
+lra system-check --report
+
+# 强制重新检查
+lra system-check --full
+
+# 分析指定模块
+lra analyze-module payment
+```
+
+### 文档闭环
+
+v3.3.0 新增**文档更新任务自动绑定**：
+
+```bash
+# 创建业务任务时，自动生成绑定的文档任务
+lra create "支付模块开发" --priority P0
+
+# 自动生成：doc_update_001（依赖 task_001）
+# 描述：更新支付模块 README + 接口文档
+```
+
+**配置模式**（`.long-run-agent/config.yaml`）：
+```yaml
+system_check:
+  doc_enforcement: strict  # strict(强制) | soft(推荐) | disabled(关闭)
+```
+
+### 预检报告示例
+
+```json
+{
+  "project_id": "old_project_001",
+  "decision": "incremental",
+  "metrics": {
+    "code_total_size_mb": 8.5,
+    "git_valid_ratio": 0.15,
+    "doc_coverage_ratio": 0.25
+  },
+  "reason": "代码体积 8.5MB>5MB，文档覆盖率 25%<40%，触发增量处理"
+}
+```
 
 ## 性能基准
 
