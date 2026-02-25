@@ -1,0 +1,58 @@
+# LRA 项目配置
+# v3.3.0 - Agent 自治式初始化配置
+
+# 系统预检配置
+system_check:
+  # 阈值配置
+  thresholds:
+    code_size_mb: 5.0           # 代码体积阈值 (MB)
+    git_valid_ratio: 0.3        # Git 规范提交占比
+    doc_coverage_ratio: 0.4     # 文档覆盖率
+    func_comment_ratio: 0.2     # 函数注释占比
+  
+  # 自动检测
+  auto_check_on_init: true      # 初始化时自动检测
+  auto_check_on_first_task: true  # 首次创建任务时自动检测
+  
+  # 文档约束模式：strict (强制) | soft (推荐) | disabled (关闭)
+  doc_enforcement: strict
+
+# 任务配置
+tasks:
+  # 默认优先级
+  default_priority: P1
+  # 默认输出要求
+  default_output_req: 8k
+  # 默认模板
+  default_template: task
+
+# 模块分析配置
+module_analysis:
+  # 代码文件扩展名
+  code_extensions:
+    - .py
+    - .java
+    - .js
+    - .ts
+    - .go
+    - .cpp
+    - .c
+    - .rs
+    - .rb
+  
+  # 文档文件扩展名
+  doc_extensions:
+    - .md
+    - .rst
+    - .txt
+  
+  # 忽略目录
+  ignore_dirs:
+    - .git
+    - node_modules
+    - __pycache__
+    - .venv
+    - dist
+    - build
+    - target
+    - vendor
