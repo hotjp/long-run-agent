@@ -371,7 +371,7 @@ class TaskManager:
 
         return tasks
 
-    def get_context(self, output_limit: str = "8k") -> Dict[str, Any]:
+    def get_context(self, output_limit: str = "8k", include_full_desc: bool = False) -> Dict[str, Any]:
         data = self._load()
         if not data:
             return {"error": "not_initialized"}
@@ -384,16 +384,22 @@ class TaskManager:
 
         can_take = []
         blocked_tasks = []
+        in_progress_tasks = []
 
         for t in tasks:
             task_status = t.get("status", "pending")
+
+            desc_limit = None if include_full_desc else 50
+            desc = t.get("description", "")
+            if desc_limit:
+                desc = desc[:desc_limit]
 
             # blocked 状态不可领取
             if task_status == "blocked":
                 blocked_tasks.append(
                     {
                         "id": t["id"],
-                        "desc": t.get("description", "")[:50],
+                        "desc": desc,
                         "dependencies": t.get("dependencies", []),
                         "dependency_type": t.get("dependency_type", "all"),
                     }
@@ -411,7 +417,7 @@ class TaskManager:
                     can_take.append(
                         {
                             "id": t["id"],
-                            "desc": t.get("description", "")[:50],
+                            "desc": desc,
                             "template": t.get("template", "task"),
                             "output_req": req,
                             "priority": t.get("priority", "P1"),
@@ -419,6 +425,15 @@ class TaskManager:
                             "dependencies": t.get("dependencies", []),
                         }
                     )
+            elif task_status == "in_progress":
+                in_progress_tasks.append(
+                    {
+                        "id": t["id"],
+                        "desc": desc,
+                        "template": t.get("template", "task"),
+                        "priority": t.get("priority", "P1"),
+                    }
+                )
 
         # 按优先级排序
         priority_order = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
@@ -429,6 +444,9 @@ class TaskManager:
             "stats": stats,
             "can_take": can_take,
         }
+
+        if in_progress_tasks:
+            result["in_progress"] = in_progress_tasks
 
         if blocked_tasks:
             result["blocked"] = blocked_tasks

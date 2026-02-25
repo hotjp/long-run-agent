@@ -8,17 +8,40 @@ import os
 import json
 import fcntl
 import subprocess
+import time
 from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime
 
 CURRENT_VERSION = "3.3.0"
 SCHEMA_VERSION = "2026-02-25"
 
+def current_time_ms() -> int:
+    """获取当前 Unix 时间戳（毫秒）"""
+    return int(time.time() * 1000)
+
+def ms_to_iso(ms: int) -> str:
+    """毫秒时间戳转 ISO 格式"""
+    return datetime.fromtimestamp(ms / 1000).isoformat()
+
+def iso_to_ms(iso_str: str) -> int:
+    """ISO 格式转毫秒时间戳"""
+    return int(datetime.fromisoformat(iso_str).timestamp() * 1000)
+
+
 HEARTBEAT_INTERVAL_MINUTES = 5
 ORPHAN_THRESHOLD_MINUTES = 15
 
 # 优先级权重
 PRIORITY_WEIGHTS = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
+
+
+def get_agent_id() -> str:
+    """获取 Agent ID（环境变量优先，否则生成 UUID）"""
+    import uuid
+    env_id = os.environ.get("LRA_AGENT_ID")
+    if env_id:
+        return env_id
+    return f"agent_{uuid.uuid4().hex[:8]}"
 
 
 class Config:

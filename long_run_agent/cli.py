@@ -11,11 +11,12 @@ import argparse
 from datetime import datetime
 from typing import Any, Dict, List
 
-from .config import CURRENT_VERSION, Config, validate_project_initialized
+from .config import CURRENT_VERSION, Config, validate_project_initialized, get_agent_id
 from .task_manager import TaskManager
 from .template_manager import TemplateManager
 from .records_manager import RecordsManager
 from .locks_manager import LocksManager
+from .batch_lock_manager import BatchLockManager
 
 try:
     from .system_check import SystemCheckTask, ConfigManager
@@ -33,11 +34,12 @@ $ lra context --output-limit 8k
 ## CORE COMMANDS
 lra init --name <name>         Initialize project
 lra context [--output-limit 4k|8k|16k|32k|128k]
-lra list [--status X] [--template X]
+lra list [--status X] [--template X] [--compact]
 lra create <desc> --template <name> [opts]
-lra show <id>                  Task details
+lra show <id> [--include-records]
 lra set <id> <status>          Update status
 lra split <id> --plan '<json>' Split task
+lra search <keyword>           Search tasks
 
 ## LOCK COMMANDS
 lra claim <id>                 Claim task
@@ -60,6 +62,25 @@ lra check-blocked              Check and unblock tasks
 ## PRIORITY COMMANDS
 lra set-priority <id> <P0|P1|P2|P3>
 
+## BATCH COMMANDS (v3.3.1)
+lra batch set <status> <ids...> [--auto-lock] [--wait]    Batch update status
+lra batch claim <ids...> [--auto-lock] [--wait]           Batch claim tasks
+lra batch delete <ids...> [--auto-lock]                   Batch delete tasks
+
+## BATCH LOCK MANAGEMENT
+lra batch-lock status                           View lock status
+lra batch-lock acquire --operation X --tasks X  Acquire lock
+lra batch-lock release                          Release lock
+lra batch-lock heartbeat [--extend 30000]       Extend lock
+lra batch-lock recover                          Recover expired lock
+lra batch-lock logs [--limit 20]                View operation logs
+
+## MULTI-AGENT CONCURRENCY
+- 批量操作自动获取锁（--auto-lock 默认启用）
+- 锁超时 30 秒自动释放
+- 使用 --wait 等待其他 Agent 完成
+- 单次批量操作建议 ≤5 个任务（50ms 延迟保证）
+
 ## V3.3.0 SYSTEM CHECK
 lra system-check               Run system preflight check
 lra system-check --report      View check report
@@ -79,7 +100,7 @@ lra analyze-module <name>      Analyze specific module
 - in_progress: Being worked on
 - completed: Done (final state)
 
-## MULTI-AGENT
+## MULTI-AGENT (Basic)
 - claim = exclusive lock
 - publish = release children
 - orphaned (no heartbeat 15min) = can be claimed
@@ -110,6 +131,7 @@ class LRACLI:
         self.template_manager = TemplateManager()
         self.records_manager = RecordsManager()
         self.locks_manager = LocksManager()
+        self.batch_lock_manager = BatchLockManager()
         self.system_check_available = HAS_SYSTEM_CHECK
 
     def _check_project(self) -> bool:
@@ -126,12 +148,31 @@ class LRACLI:
             return
 
         context = self.task_manager.get_context(output_limit)
+        locks = self.locks_manager.get_all_locks()
+        
+        # 添加锁状态信息到 can_take 任务
+        for task in context.get("can_take", []):
+            lock = locks.get(task["id"])
+            if lock:
+                task["lock_status"] = lock.get("status", "free")
+            else:
+                task["lock_status"] = "free"
+        
+        # 添加锁状态信息到 in_progress 任务
+        for task in context.get("in_progress", []):
+            lock = locks.get(task["id"])
+            if lock:
+                task["lock_status"] = lock.get("status", "free")
+                task["last_heartbeat"] = lock.get("last_heartbeat")
+            else:
+                task["lock_status"] = "free"
+        
         resumable = self.locks_manager.get_resumable()
         if resumable:
             context["resumable"] = resumable
         output(context, json_mode)
 
-    def cmd_list(self, status: str = None, template: str = None, json_mode: bool = False):
+    def cmd_list(self, status: str = None, template: str = None, compact: bool = False, json_mode: bool = False):
         if not self._check_project():
             output({"error": "not_initialized"}, json_mode)
             return
@@ -150,6 +191,14 @@ class LRACLI:
                 ],
                 json_mode,
             )
+        elif compact:
+            # 紧凑模式：单行显示所有关键信息
+            for t in tasks:
+                priority = t.get("priority", "P1")
+                status = t.get("status", "pending")
+                template = t.get("template", "task")
+                desc = t.get("description", "")[:60]
+                print(f"{t['id']:12} [{status:12}] [{priority}] [{template:15}] {desc}")
         else:
             for t in tasks:
                 print(
@@ -203,20 +252,62 @@ class LRACLI:
         else:
             output(result, json_mode)
 
-    def cmd_show(self, task_id: str, json_mode: bool = False):
+    def cmd_show(self, task_id: str, include_records: bool = False, json_mode: bool = False):
         if not self._check_project():
             output({"error": "not_initialized"}, json_mode)
             return
 
         task = self.task_manager.show(task_id)
-        if task:
-            output(task, json_mode)
-        else:
+        if not task:
             output({"error": "not_found"}, json_mode)
+            return
+        
+        # 添加锁状态信息
+        lock = self.locks_manager.get_lock(task_id)
+        if lock:
+            task["lock_status"] = lock.get("status", "free")
+            task["lock_info"] = {
+                "claimed_at": lock.get("claimed_at"),
+                "last_heartbeat": lock.get("last_heartbeat"),
+                "session_id": lock.get("session_id"),
+            }
+        
+        # 添加依赖关系
+        dependencies = task.get("dependencies", [])
+        if dependencies:
+            dep_details = []
+            for dep_id in dependencies:
+                dep_task = self.task_manager.get(dep_id)
+                if dep_task:
+                    dep_details.append({
+                        "id": dep_id,
+                        "status": dep_task.get("status"),
+                        "desc": dep_task.get("description", "")[:50],
+                    })
+            task["dependency_details"] = dep_details
+        
+        # 添加任务记录（如果请求）
+        if include_records:
+            records = self.records_manager.get(task_id)
+            if records:
+                task["records"] = records
+        
+        output(task, json_mode)
 
     def cmd_set(self, task_id: str, status: str, json_mode: bool = False):
         if not self._check_project():
             output({"error": "not_initialized"}, json_mode)
+            return
+
+        # 先检查当前状态
+        current_task = self.task_manager.get(task_id)
+        if not current_task:
+            output({"error": "not_found"}, json_mode)
+            return
+        
+        current_status = current_task.get("status", "pending")
+        if current_status == status:
+            output({"ok": True, "message": "already_in_target_status", "current_status": status, "task_id": task_id}, json_mode)
             return
 
         success, msg = self.task_manager.update_status(task_id, status)
@@ -417,7 +508,198 @@ class LRACLI:
         
         output({"error": "not_found"}, json_mode)
     
-    # ========== v3.3.0 新增命令：系统预检 ==========
+
+    def cmd_batch(self, operation: str, status: str = None, task_ids: List[str] = None, 
+                  auto_lock: bool = True, wait: bool = False, json_mode: bool = False):
+        """批量操作（支持自动锁）"""
+        import sys
+        if not self._check_project():
+            output({"error": "not_initialized"}, json_mode)
+            return
+        
+        if not task_ids:
+            output({"error": "no_task_ids"}, json_mode)
+            return
+        
+        # 检查批量大小
+        allowed, warning = self.batch_lock_manager.check_batch_size(task_ids)
+        if warning:
+            print(f"⚠️  WARNING: {warning}", file=sys.stderr)
+        
+        agent_id = get_agent_id()
+        
+        # 自动获取锁
+        if auto_lock:
+            acquired, reason, lock_info = self.batch_lock_manager.acquire(
+                agent_id, f"batch_{operation}", task_ids, wait=wait
+            )
+            if not acquired:
+                if reason == "lock_held_by_other":
+                    output({
+                        "error": "lock_held_by_other",
+                        "hint": "使用 --wait 选项等待或使用 batch-lock 命令手动管理锁",
+                        "holder": lock_info["holder"],
+                        "remaining_ms": lock_info["remaining_ms"]
+                    }, json_mode)
+                else:
+                    output({"error": reason}, json_mode)
+                return
+        
+        try:
+            results = []
+            for task_id in task_ids:
+                if operation == "set":
+                    if not status:
+                        results.append({"task_id": task_id, "error": "missing_status"})
+                        continue
+                    current_task = self.task_manager.get(task_id)
+                    if not current_task:
+                        results.append({"task_id": task_id, "error": "not_found"})
+                        continue
+                    
+                    current_status = current_task.get("status", "pending")
+                    if current_status == status:
+                        results.append({"task_id": task_id, "message": "already_in_target_status", "current_status": status})
+                    else:
+                        # 验证状态流转
+                        template = current_task.get("template", "task")
+                        if not self.template_manager.validate_transition(template, current_status, status):
+                            results.append({
+                                "task_id": task_id,
+                                "error": "invalid_transition",
+                                "from": current_status,
+                                "to": status,
+                                "template": template
+                            })
+                            continue
+                        
+                        success, msg = self.task_manager.update_status(task_id, status)
+                        results.append({"task_id": task_id, "ok": success, "status": msg})
+                
+                elif operation == "delete":
+                    success = self.task_manager.delete(task_id)
+                    results.append({"task_id": task_id, "ok": success})
+                
+                elif operation == "claim":
+                    # 批量 claim
+                    can_claim, reason = self.locks_manager.can_claim(task_id)
+                    if not can_claim:
+                        results.append({"task_id": task_id, "error": "cannot_claim", "reason": reason})
+                        continue
+                    
+                    success, result = self.locks_manager.claim(task_id)
+                    results.append({"task_id": task_id, "ok": success, "result": result})
+            
+            output({"operation": operation, "results": results, "total": len(results)}, json_mode)
+        finally:
+            # 自动释放锁
+            if auto_lock:
+                self.batch_lock_manager.release(agent_id)
+    
+    def cmd_search(self, query: str, status: str = None, json_mode: bool = False):
+        """搜索任务"""
+        if not self._check_project():
+            output({"error": "not_initialized"}, json_mode)
+            return
+        
+        all_tasks = self.task_manager.list_all()
+        query_lower = query.lower()
+        
+        matched = []
+        for task in all_tasks:
+            # 按状态过滤
+            if status and task.get("status") != status:
+                continue
+            
+            # 搜索标题和描述
+            desc = task.get("description", "").lower()
+            task_id = task.get("id", "").lower()
+            
+            if query_lower in desc or query_lower in task_id:
+                matched.append({
+                    "id": task["id"],
+                    "status": task.get("status"),
+                    "desc": task.get("description", "")[:80],
+                    "priority": task.get("priority", "P1"),
+                })
+        
+        output({"query": query, "status_filter": status, "results": matched, "count": len(matched)}, json_mode)
+
+
+    
+    # ========== 批量操作锁命令 ==========
+    
+    def cmd_batch_lock_status(self, json_mode: bool = False):
+        """查看批量锁状态"""
+        status = self.batch_lock_manager.status()
+        output(status, json_mode)
+    
+    def cmd_batch_lock_acquire(
+        self,
+        operation: str,
+        tasks: str,
+        timeout: int = 30000,
+        wait: bool = False,
+        json_mode: bool = False
+    ):
+        """获取批量锁"""
+        task_ids = [t.strip() for t in tasks.split(",")]
+        agent_id = get_agent_id()
+        
+        # 检查批量大小
+        allowed, warning = self.batch_lock_manager.check_batch_size(task_ids)
+        if warning:
+            print(f"⚠️  WARNING: {warning}", file=sys.stderr)
+        
+        success, reason, info = self.batch_lock_manager.acquire(
+            agent_id, operation, task_ids, timeout, wait
+        )
+        
+        if success:
+            output({
+                "ok": True,
+                "message": reason,
+                "lock": info,
+                "agent_id": agent_id
+            }, json_mode)
+        else:
+            if reason == "lock_held_by_other":
+                output({
+                    "ok": False,
+                    "error": reason,
+                    "hint": "等待其他 Agent 完成操作，或使用 --wait 选项",
+                    "holder": info["holder"],
+                    "remaining_ms": info["remaining_ms"],
+                    "operation_type": info["operation_type"]
+                }, json_mode)
+            else:
+                output({"ok": False, "error": reason}, json_mode)
+    
+    def cmd_batch_lock_release(self, json_mode: bool = False):
+        """释放批量锁"""
+        agent_id = get_agent_id()
+        success, reason = self.batch_lock_manager.release(agent_id)
+        output({"ok": success, "message": reason}, json_mode)
+    
+    def cmd_batch_lock_heartbeat(self, extend: int = 30000, json_mode: bool = False):
+        """心跳续期"""
+        agent_id = get_agent_id()
+        success, reason = self.batch_lock_manager.heartbeat(agent_id, extend)
+        output({"ok": success, "message": reason}, json_mode)
+    
+    def cmd_batch_lock_recover(self, json_mode: bool = False):
+        """强制回收获期锁"""
+        agent_id = get_agent_id()
+        success, reason = self.batch_lock_manager.recover(agent_id)
+        output({"ok": success, "message": reason}, json_mode)
+    
+    def cmd_batch_lock_logs(self, limit: int = 20, json_mode: bool = False):
+        """查看操作日志"""
+        logs = self.batch_lock_manager.get_logs(limit)
+        output({"logs": logs, "count": len(logs)}, json_mode)
+
+
+        # ========== v3.3.0 新增命令：系统预检 ==========
     
     def cmd_system_check(self, full: bool = False, report: bool = False, json_mode: bool = False):
         """执行或查看系统预检"""
@@ -494,6 +776,7 @@ def main():
     list_p = subparsers.add_parser("list", help="List tasks")
     list_p.add_argument("--status")
     list_p.add_argument("--template")
+    list_p.add_argument("--compact", action="store_true", help="Compact output")
 
     # create
     create_p = subparsers.add_parser("create", help="Create task")
@@ -508,7 +791,9 @@ def main():
     create_p.add_argument("--variables", default=None, help="JSON string of template variables")
 
     # show
-    subparsers.add_parser("show", help="Show task").add_argument("task_id")
+    show_p = subparsers.add_parser("show", help="Show task")
+    show_p.add_argument("task_id")
+    show_p.add_argument("--include-records", action="store_true", help="Include task records")
 
     # set
     set_p = subparsers.add_parser("set", help="Update status")
@@ -575,7 +860,66 @@ def main():
     sp_p.add_argument("task_id")
     sp_p.add_argument("priority", choices=["P0", "P1", "P2", "P3"])
     
-    # v3.3.0: system-check
+    # batch
+    batch_p = subparsers.add_parser("batch", help="Batch operations")
+    batch_sub = batch_p.add_subparsers(dest="batch_cmd")
+    
+    # batch set
+    batch_set_p = batch_sub.add_parser("set", help="Batch set status")
+    batch_set_p.add_argument("status")
+    batch_set_p.add_argument("task_ids", nargs="+")
+    batch_set_p.add_argument("--auto-lock", action="store_true", dest="auto_lock", default=True, help="Auto acquire batch lock")
+    batch_set_p.add_argument("--no-auto-lock", action="store_false", dest="auto_lock", help="Disable auto lock")
+    batch_set_p.add_argument("--wait", action="store_true", help="Wait for lock if held")
+    
+    # batch delete
+    batch_del_p = batch_sub.add_parser("delete", help="Batch delete tasks")
+    batch_del_p.add_argument("task_ids", nargs="+")
+    batch_del_p.add_argument("--auto-lock", action="store_true", dest="auto_lock", default=True, help="Auto acquire batch lock")
+    batch_del_p.add_argument("--wait", action="store_true", help="Wait for lock if held")
+    
+    # batch claim
+    batch_claim_p = batch_sub.add_parser("claim", help="Batch claim tasks")
+    batch_claim_p.add_argument("task_ids", nargs="+")
+    batch_claim_p.add_argument("--auto-lock", action="store_true", dest="auto_lock", default=True, help="Auto acquire batch lock")
+    batch_claim_p.add_argument("--wait", action="store_true", help="Wait for lock if held")
+    # search
+    search_p = subparsers.add_parser("search", help="Search tasks")
+    search_p.add_argument("query")
+    search_p.add_argument("--status", help="Filter by status")
+    
+
+    # batch-lock
+    bl_p = subparsers.add_parser("batch-lock", help="Batch lock management")
+    bl_sub = bl_p.add_subparsers(dest="batch_lock_cmd")
+    
+    # batch-lock status
+    bl_sub.add_parser("status")
+    
+    # batch-lock acquire
+    bl_acquire = bl_sub.add_parser("acquire", help="Acquire batch lock")
+    bl_acquire.add_argument("--operation", required=True, choices=["batch_claim", "batch_set", "batch_delete"])
+    bl_acquire.add_argument("--tasks", required=True, help="Comma-separated task IDs")
+    bl_acquire.add_argument("--timeout", type=int, default=30000, help="Lock timeout in ms")
+    bl_acquire.add_argument("--wait", action="store_true", help="Wait for lock if held by others")
+    bl_acquire.add_argument("--max-wait", type=int, default=60000, dest="max_wait", help="Max wait time in ms")
+    
+    # batch-lock release
+    bl_sub.add_parser("release")
+    
+    # batch-lock heartbeat
+    bl_heartbeat = bl_sub.add_parser("heartbeat", help="Extend lock timeout")
+    bl_heartbeat.add_argument("--extend", type=int, default=30000, help="Extend timeout in ms")
+    
+    # batch-lock recover
+    bl_sub.add_parser("recover", help="Recover expired lock")
+    
+    # batch-lock logs
+    bl_logs = bl_sub.add_parser("logs", help="View operation logs")
+    bl_logs.add_argument("--limit", type=int, default=20, help="Number of logs to show")
+
+
+        # v3.3.0: system-check
     sc_p = subparsers.add_parser("system-check", help="System check and preflight")
     sc_p.add_argument("--full", action="store_true", help="Force full re-check")
     sc_p.add_argument("--report", action="store_true", help="View existing report")
@@ -593,7 +937,7 @@ def main():
     elif args.command == "context":
         cli.cmd_context(args.output_limit, json_mode)
     elif args.command == "list":
-        cli.cmd_list(args.status, args.template, json_mode)
+        cli.cmd_list(args.status, args.template, args.compact, json_mode)
     elif args.command == "create":
         cli.cmd_create(
             args.description,
@@ -608,7 +952,7 @@ def main():
             json_mode,
         )
     elif args.command == "show":
-        cli.cmd_show(args.task_id, json_mode)
+        cli.cmd_show(args.task_id, args.include_records, json_mode)
     elif args.command == "set":
         cli.cmd_set(args.task_id, args.status, json_mode)
     elif args.command == "split":
@@ -648,6 +992,38 @@ def main():
         cli.cmd_check_blocked(json_mode)
     elif args.command == "set-priority":
         cli.cmd_set_priority(args.task_id, args.priority, json_mode)
+    elif args.command == "batch":
+        if args.batch_cmd == "set":
+            cli.cmd_batch("set", args.status, args.task_ids, args.auto_lock, args.wait, json_mode)
+        elif args.batch_cmd == "delete":
+            cli.cmd_batch("delete", None, args.task_ids, args.auto_lock, args.wait, json_mode)
+        elif args.batch_cmd == "claim":
+            cli.cmd_batch("claim", None, args.task_ids, args.auto_lock, args.wait, json_mode)
+        else:
+            batch_p.print_help()
+    elif args.command == "batch-lock":
+        if args.batch_lock_cmd == "status":
+            cli.cmd_batch_lock_status(json_mode)
+        elif args.batch_lock_cmd == "acquire":
+            cli.cmd_batch_lock_acquire(
+                args.operation,
+                args.tasks,
+                args.timeout,
+                args.wait,
+                json_mode
+            )
+        elif args.batch_lock_cmd == "release":
+            cli.cmd_batch_lock_release(json_mode)
+        elif args.batch_lock_cmd == "heartbeat":
+            cli.cmd_batch_lock_heartbeat(args.extend, json_mode)
+        elif args.batch_lock_cmd == "recover":
+            cli.cmd_batch_lock_recover(json_mode)
+        elif args.batch_lock_cmd == "logs":
+            cli.cmd_batch_lock_logs(args.limit, json_mode)
+        else:
+            bl_p.print_help()
+    elif args.command == "search":
+        cli.cmd_search(args.query, args.status, json_mode)
     elif args.command == "system-check":
         cli.cmd_system_check(args.full, args.report, json_mode)
     elif args.command == "analyze-module":
