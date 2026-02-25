@@ -17,9 +17,15 @@ from .template_manager import TemplateManager
 from .records_manager import RecordsManager
 from .locks_manager import LocksManager
 
+try:
+    from .system_check import SystemCheckTask, ConfigManager
+    HAS_SYSTEM_CHECK = True
+except:
+    HAS_SYSTEM_CHECK = False
+
 
 AGENT_GUIDE = """
-LRA - AI Agent Task Manager v3.2
+LRA - AI Agent Task Manager v3.3
 
 ## QUICK START
 $ lra context --output-limit 8k
@@ -48,11 +54,17 @@ lra template create <name>     Create template
 
 ## DEPENDENCY COMMANDS
 lra deps <id>                  View task dependencies
-lra deps <id> --dependents     View tasks depending on this
+lra deps <id> --dependents     View dependent tasks
 lra check-blocked              Check and unblock tasks
 
 ## PRIORITY COMMANDS
 lra set-priority <id> <P0|P1|P2|P3>
+
+## V3.3.0 SYSTEM CHECK
+lra system-check               Run system preflight check
+lra system-check --report      View check report
+lra system-check --full        Force re-run check
+lra analyze-module <name>      Analyze specific module
 
 ## CREATE TASK OPTIONS
 --dependencies task_001,task_002  Depend on other tasks
@@ -98,6 +110,7 @@ class LRACLI:
         self.template_manager = TemplateManager()
         self.records_manager = RecordsManager()
         self.locks_manager = LocksManager()
+        self.system_check_available = HAS_SYSTEM_CHECK
 
     def _check_project(self) -> bool:
         ok, _ = validate_project_initialized()
@@ -382,18 +395,18 @@ class LRACLI:
         if not self._check_project():
             output({"error": "not_initialized"}, json_mode)
             return
-
+        
         task = self.task_manager.get(task_id)
         if not task:
             output({"error": "not_found"}, json_mode)
             return
-
+        
         # 直接更新任务数据
         data = self.task_manager._load()
         if not data:
             output({"error": "not_initialized"}, json_mode)
             return
-
+        
         for t in data.get("tasks", []):
             if t.get("id") == task_id:
                 t["priority"] = priority
@@ -401,8 +414,62 @@ class LRACLI:
                 self.task_manager._save(data)
                 output({"ok": True, "task_id": task_id, "priority": priority}, json_mode)
                 return
-
+        
         output({"error": "not_found"}, json_mode)
+    
+    # ========== v3.3.0 新增命令：系统预检 ==========
+    
+    def cmd_system_check(self, full: bool = False, report: bool = False, json_mode: bool = False):
+        """执行或查看系统预检"""
+        if not self.system_check_available:
+            output({"error": "system_check_not_available"}, json_mode)
+            return
+        
+        if not self._check_project():
+            output({"error": "not_initialized"}, json_mode)
+            return
+        
+        if report:
+            # 查看报告
+            tm_report = self.task_manager.get_system_check_report()
+            if tm_report:
+                output(tm_report, json_mode)
+            else:
+                output({"error": "no_report", "hint": "run 'lra system-check' first"}, json_mode)
+        else:
+            # 执行预检
+            if full or not self.task_manager.has_system_check():
+                try:
+                    project_path = os.getcwd()
+                    checker = SystemCheckTask(project_path=project_path)
+                    report_data = checker.run()
+                    output({"ok": True, "report": report_data}, json_mode)
+                except Exception as e:
+                    output({"error": str(e)}, json_mode)
+            else:
+                output({"info": "report_exists", "hint": "use --report to view or --full to re-run"}, json_mode)
+    
+    def cmd_analyze_module(self, module_name: str, json_mode: bool = False):
+        """分析指定模块"""
+        if not self._check_project():
+            output({"error": "not_initialized"}, json_mode)
+            return
+        
+        # 简单实现：查找包含模块名的任务
+        tasks = self.task_manager.list_all()
+        module_tasks = [
+            t for t in tasks
+            if module_name.lower() in t.get("description", "").lower()
+        ]
+        
+        output({
+            "module": module_name,
+            "tasks": [
+                {"id": t["id"], "desc": t.get("description", "")[:50], "status": t.get("status")}
+                for t in module_tasks
+            ],
+            "count": len(module_tasks),
+        }, json_mode)
 
 
 def main():
@@ -494,21 +561,28 @@ def main():
     # guide & version
     subparsers.add_parser("guide", help="Show agent guide")
     subparsers.add_parser("version", help="Show version")
-
+    
     # deps
     deps_p = subparsers.add_parser("deps", help="View task dependencies")
     deps_p.add_argument("task_id")
-    deps_p.add_argument(
-        "--dependents", action="store_true", help="Show tasks that depend on this task"
-    )
-
+    deps_p.add_argument("--dependents", action="store_true", help="Show tasks that depend on this task")
+    
     # check-blocked
     subparsers.add_parser("check-blocked", help="Check and unblock blocked tasks")
-
+    
     # set-priority
     sp_p = subparsers.add_parser("set-priority", help="Set task priority")
     sp_p.add_argument("task_id")
     sp_p.add_argument("priority", choices=["P0", "P1", "P2", "P3"])
+    
+    # v3.3.0: system-check
+    sc_p = subparsers.add_parser("system-check", help="System check and preflight")
+    sc_p.add_argument("--full", action="store_true", help="Force full re-check")
+    sc_p.add_argument("--report", action="store_true", help="View existing report")
+    
+    # v3.3.0: analyze-module
+    am_p = subparsers.add_parser("analyze-module", help="Analyze specific module")
+    am_p.add_argument("module_name", help="Module name to analyze")
 
     args = parser.parse_args()
     json_mode = getattr(args, "json", False)
@@ -574,6 +648,10 @@ def main():
         cli.cmd_check_blocked(json_mode)
     elif args.command == "set-priority":
         cli.cmd_set_priority(args.task_id, args.priority, json_mode)
+    elif args.command == "system-check":
+        cli.cmd_system_check(args.full, args.report, json_mode)
+    elif args.command == "analyze-module":
+        cli.cmd_analyze_module(args.module_name, json_mode)
     else:
         parser.print_help()
 
