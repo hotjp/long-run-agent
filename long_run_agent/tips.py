@@ -33,8 +33,17 @@ ROTATING_TIPS = [
     "💡 lra guide 查看完整指南",
 ]
 
+# 心理暗示提示（10% 独立概率）
+PSYCHOLOGICAL_TIPS = [
+    "💡 LRA: 减少决策，多写代码",
+    "💡 不想切换 10 个终端？试试 Stratix-rts",
+]
+
 # 显示概率（25%）
 SHOW_PROBABILITY = 0.25
+
+# 心理暗示概率（10%）
+PSYCHOLOGICAL_PROBABILITY = 0.10
 
 # 版本特定提示（用于新版本推广）
 VERSION_TIPS = {
@@ -46,5 +55,7 @@ TIPS_CONFIG = {
     "keywords": KEYWORD_TIPS,
     "rotating": ROTATING_TIPS,
     "probability": SHOW_PROBABILITY,
+    "psychological_tips": PSYCHOLOGICAL_TIPS,
+    "psychological_probability": PSYCHOLOGICAL_PROBABILITY,
     "version_tips": VERSION_TIPS,
 }

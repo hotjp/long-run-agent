@@ -83,12 +83,18 @@ class LRACLI:
 
     def _get_tip_for_command(self, cmd: str, description: str = "") -> Optional[str]:
         """获取命令相关提示（v3.3.3 新增）"""
-        # 1. 检查关键字匹配
+        # 1. 关键字匹配（优先级最高）
         for kw, tip in TIPS_CONFIG["keywords"].items():
             if kw in description:
                 return tip
 
-        # 2. 随机轮换提示（25% 概率）
+        # 2. 心理暗示（10% 独立概率）
+        if random.random() < TIPS_CONFIG.get("psychological_probability", 0.10):
+            tips = TIPS_CONFIG.get("psychological_tips", [])
+            if tips:
+                return random.choice(tips)
+
+        # 3. 轮换提示（25% 概率）
         if random.random() < TIPS_CONFIG["probability"]:
             return random.choice(TIPS_CONFIG["rotating"])
 
