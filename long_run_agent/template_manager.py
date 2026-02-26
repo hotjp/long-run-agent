@@ -31,6 +31,7 @@ class TemplateManager:
             "novel-chapter": self._get_novel_chapter_template(),
             "code-module": self._get_code_module_template(),
             "data-pipeline": self._get_data_pipeline_template(),
+            "doc-update": self._get_doc_update_template(),
         }
         for name in builtin.keys():
             path = os.path.join(self.templates_dir, f"{name}.yaml")
@@ -245,6 +246,64 @@ class TemplateManager:
                 "success": [],
             },
             "acceptance": ["数据完整性校验通过", "处理完成"],
+        }
+
+    def _get_doc_update_template(self) -> Dict[str, Any]:
+        return {
+            "name": "doc-update",
+            "description": "文档更新任务模板",
+            "version": "1.0",
+            "template_engine": "jinja2",
+            "keywords": ["文档", "更新", "docs", "documentation", "readme", "api"],
+            "structure": """# {{ id }}
+
+## ⚠️ 重要提示（Agent 必读）
+
+**当前位置**: `.long-run-agent/tasks/{{id}}.md`（任务描述文件）
+
+**工作目录**: 项目根目录（`.long-run-agent` 的同级目录）
+
+**产出物位置**: 请在项目适当位置更新文档（如 `README.md`, `docs/`, 或代码文件中的 docstring）
+
+**这是配置文件**，不是最终产出！
+
+## 关联业务任务
+{% if dependencies %}
+{% for dep in dependencies %}
+- {{ dep }}
+{% endfor %}
+{% else %}
+<!-- 无关联业务任务 -->
+{% endif %}
+
+## 模块名称
+{{ module }}
+
+## 更新范围
+{{ update_scope }}
+
+## 用户需求
+{{ user_demand }}
+
+## 需更新的文档列表
+<!-- Agent 自动定位 -->
+- [ ] {{ module }}/README.md
+- [ ] docs/{{ module }}/API.md
+- [ ] src/{{ module }}/__init__.py (docstring)
+
+## 更新内容
+<!-- 增量更新，仅修改相关片段 -->
+
+## 更新说明
+<!-- 记录更新原因和内容 -->
+""",
+            "states": ["pending", "in_progress", "completed"],
+            "transitions": {
+                "pending": ["in_progress"],
+                "in_progress": ["completed"],
+                "completed": [],
+            },
+            "acceptance": ["文档已更新", "更新内容与业务需求一致", "格式规范"],
         }
 
     def _save_template(self, path: str, data: Dict[str, Any]):
