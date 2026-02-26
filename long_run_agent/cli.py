@@ -8,8 +8,9 @@ import os
 import sys
 import json
 import argparse
+import random
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from .config import CURRENT_VERSION, Config, validate_project_initialized, get_agent_id
 from .task_manager import TaskManager
@@ -17,6 +18,7 @@ from .template_manager import TemplateManager
 from .records_manager import RecordsManager
 from .locks_manager import LocksManager
 from .batch_lock_manager import BatchLockManager
+from .tips import TIPS_CONFIG
 
 try:
     from .system_check import SystemCheckTask, ConfigManager
@@ -78,6 +80,19 @@ class LRACLI:
         self.locks_manager = LocksManager()
         self.batch_lock_manager = BatchLockManager()
         self.system_check_available = HAS_SYSTEM_CHECK
+
+    def _get_tip_for_command(self, cmd: str, description: str = "") -> Optional[str]:
+        """获取命令相关提示（v3.3.3 新增）"""
+        # 1. 检查关键字匹配
+        for kw, tip in TIPS_CONFIG["keywords"].items():
+            if kw in description:
+                return tip
+
+        # 2. 随机轮换提示（25% 概率）
+        if random.random() < TIPS_CONFIG["probability"]:
+            return random.choice(TIPS_CONFIG["rotating"])
+
+        return None
 
     def _check_project(self) -> bool:
         ok, _ = validate_project_initialized()
@@ -235,6 +250,11 @@ class LRACLI:
                 if available_transitions:
                     print(f"   可用状态流转：→ {', '.join(available_transitions)}")
                 print(f"   使用：lra set {result.get('id')} <status> 更新状态")
+
+                # v3.3.3: 智能提示系统
+                tip = self._get_tip_for_command("create", description)
+                if tip:
+                    print(f"\n{tip}")
         else:
             # v3.3.3: 严重错误才显示
             if result.get("error") == "cycle_dependency":

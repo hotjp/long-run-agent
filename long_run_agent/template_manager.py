@@ -325,7 +325,15 @@ class TemplateManager:
                                 "keywords": template.get("keywords", []),
                             }
                         )
-        return templates
+
+        # v3.3.3: 模板排序（task 放最后）
+        from .tips import TEMPLATE_PRIORITY
+
+        def sort_key(t):
+            priority = TEMPLATE_PRIORITY.get(t["name"], 99)
+            return (priority, t["name"])
+
+        return sorted(templates, key=sort_key)
 
     def load_template(self, name: str) -> Optional[Dict[str, Any]]:
         path = os.path.join(self.templates_dir, f"{name}.yaml")
