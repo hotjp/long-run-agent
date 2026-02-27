@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "long-run-agent"
-version = "3.3.3"
+version = "3.3.5"
 description = "A powerful framework for managing long-running AI Agent tasks"
 readme = "README.md"
 license = {text = "MIT"}
