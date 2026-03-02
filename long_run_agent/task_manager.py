@@ -343,11 +343,12 @@ class TaskManager:
                 t["status"] = status
                 t["updated_at"] = datetime.now().isoformat()
 
+                self._save(data)
+
                 # 依赖满足检查 - 更新依赖此任务的其他任务
                 if self._is_final_status(t, status):
                     self._unblock_dependents(task_id)
 
-                self._save(data)
                 return True, status
         return False, "not_found"
 
@@ -356,6 +357,103 @@ class TaskManager:
         template = task.get("template", "task")
         final_states = self._get_final_states(template)
         return status in final_states
+
+    def _get_final_states(self, template: str) -> List[str]:
+        """获取模板的终态列表"""
+        try:
+            transitions = self.template_manager.get_transitions_for_template(template)
+            all_states = self.template_manager.get_states_for_template(template)
+            return [s for s in all_states if not transitions.get(s)]
+        except Exception:
+            return ["completed", "success", "finalized"]
+
+    def _check_dependencies_satisfied(self, dependencies: List[str], dependency_type: str) -> bool:
+        """检查依赖是否满足（宽松模式）"""
+        if not dependencies:
+            return True
+
+        try:
+            completed = []
+            for dep_id in dependencies:
+                dep_task = self.get(dep_id)
+                if not dep_task:
+                    completed.append(dep_id)
+                    continue
+
+                status = dep_task.get("status", "pending")
+                if status in ["completed", "success", "finalized", "done"]:
+                    completed.append(dep_id)
+
+            if dependency_type == "all":
+                return len(completed) == len(dependencies)
+            else:
+                return len(completed) > 0
+        except Exception:
+            return True
+
+    def _unblock_dependents(self, task_id: str):
+        """解锁依赖此任务的其他任务"""
+        try:
+            data = self._load()
+            if not data:
+                return
+
+            tasks = data.get("tasks", [])
+            updated = False
+
+            for task in tasks:
+                if task.get("status") != "blocked":
+                    continue
+
+                dependencies = task.get("dependencies", [])
+                if task_id not in dependencies:
+                    continue
+
+                dependency_type = task.get("dependency_type", "all")
+                if self._check_dependencies_satisfied(dependencies, dependency_type):
+                    template = task.get("template", "task")
+                    initial_state = self._get_initial_status(template)
+                    task["status"] = initial_state
+                    task["updated_at"] = datetime.now().isoformat()
+                    updated = True
+
+            if updated:
+                self._save(data)
+        except Exception:
+            pass
+
+    def check_blocked_tasks(self) -> List[str]:
+        """检查并解锁所有满足条件的blocked任务"""
+        unblocked = []
+        try:
+            data = self._load()
+            if not data:
+                return unblocked
+
+            tasks = data.get("tasks", [])
+            updated = False
+
+            for task in tasks:
+                if task.get("status") != "blocked":
+                    continue
+
+                dependencies = task.get("dependencies", [])
+                dependency_type = task.get("dependency_type", "all")
+
+                if self._check_dependencies_satisfied(dependencies, dependency_type):
+                    template = task.get("template", "task")
+                    initial_state = self._get_initial_status(template)
+                    task["status"] = initial_state
+                    task["updated_at"] = datetime.now().isoformat()
+                    unblocked.append(task["id"])
+                    updated = True
+
+            if updated:
+                self._save(data)
+        except Exception:
+            pass
+
+        return unblocked
 
     def list_all(
         self, status: str = None, parent_id: str = None, template: str = None
@@ -630,3 +728,163 @@ class TaskManager:
                 "decision": "full",
                 "reason": f"预检失败：{str(e)}",
             }
+
+    def recover_task_list(self) -> Tuple[bool, Dict[str, Any]]:
+        """从 tasks/目录恢复任务列表"""
+        import re
+
+        tasks_dir = Config.get_tasks_dir()
+        if not os.path.exists(tasks_dir):
+            return False, {"error": "tasks_dir_not_found"}
+
+        task_files = [f for f in os.listdir(tasks_dir) if f.endswith(".md")]
+        if not task_files:
+            return False, {"error": "no_task_files_found"}
+
+        data = self._load()
+        if not data:
+            data = {
+                "project_name": "unknown",
+                "created_at": datetime.now().isoformat(),
+                "tasks": [],
+            }
+
+        existing_ids = {t.get("id") for t in data.get("tasks", [])}
+        recovered = []
+
+        for filename in sorted(task_files):
+            task_id = filename[:-3]
+            if task_id in existing_ids:
+                continue
+
+            task_path = os.path.join(tasks_dir, filename)
+            try:
+                file_stat = os.stat(task_path)
+                created_time = datetime.fromtimestamp(file_stat.st_ctime).isoformat()
+                modified_time = datetime.fromtimestamp(file_stat.st_mtime).isoformat()
+
+                with open(task_path, "r", encoding="utf-8") as f:
+                    content = f.read()
+
+                description = self._extract_description_from_file(content)
+                template = self._extract_template_from_file(content) or "task"
+
+                task = {
+                    "id": task_id,
+                    "description": description or f"Recovered task: {task_id}",
+                    "template": template,
+                    "priority": "P1",
+                    "status": "pending",
+                    "parent_id": None,
+                    "output_req": "8k",
+                    "task_file": f"tasks/{task_id}.md",
+                    "created_at": created_time,
+                    "updated_at": modified_time,
+                    "dependencies": [],
+                    "dependency_type": "all",
+                    "deadline": None,
+                }
+
+                data["tasks"].append(task)
+                recovered.append(task_id)
+
+            except Exception as e:
+                recovered.append(f"{task_id}: {str(e)}")
+
+        self._save(data)
+        return True, {
+            "recovered_count": len(recovered),
+            "recovered_tasks": recovered,
+        }
+
+    def _extract_description_from_file(self, content: str) -> Optional[str]:
+        """从任务文件中提取描述"""
+        import re
+
+        match = re.search(r"## 描述\s*\n\s*\n(.+?)(?=\n\n##|\Z)", content, re.MULTILINE)
+        if match:
+            return match.group(1).strip()
+        return None
+
+    def _extract_template_from_file(self, content: str) -> Optional[str]:
+        """从任务文件中提取模板类型"""
+        import re
+
+        match = re.search(r"## 模板\s*\n\s*\n(.+?)(?=\n\n##|\Z)", content, re.MULTILINE)
+        if match:
+            return match.group(1).strip()
+        return None
+
+    def detect_project_state(self) -> Dict[str, Any]:
+        """检测项目当前状态"""
+        result = {
+            "initialized": False,
+            "has_task_list": False,
+            "has_task_files": False,
+            "task_count": 0,
+            "pending_count": 0,
+            "in_progress_count": 0,
+            "needs_recovery": False,
+            "state": "unknown",
+        }
+
+        # 检测 1: 是否已初始化
+        if os.path.exists(Config.get_metadata_dir()):
+            result["initialized"] = True
+
+        # 检测 2: task_list.json 是否存在且有效
+        task_list_path = Config.get_task_list_path()
+        if os.path.exists(task_list_path):
+            task_list = self._load()
+            if task_list and task_list.get("tasks"):
+                result["has_task_list"] = True
+                result["task_count"] = len(task_list["tasks"])
+
+                # 统计状态
+                for t in task_list["tasks"]:
+                    status = t.get("status", "pending")
+                    if status == "pending":
+                        result["pending_count"] += 1
+                    elif status == "in_progress":
+                        result["in_progress_count"] += 1
+            elif task_list:
+                # task_list.json 存在但 tasks 为空
+                result["has_task_list"] = True
+                result["task_count"] = 0
+        else:
+            # task_list.json 不存在
+            result["has_task_list"] = False
+
+        # 检测 3: tasks/ 目录是否有文件
+        tasks_dir = Config.get_tasks_dir()
+        if os.path.exists(tasks_dir):
+            try:
+                task_files = [f for f in os.listdir(tasks_dir) if f.endswith(".md")]
+                if task_files:
+                    result["has_task_files"] = True
+
+                    # 需要恢复：有任务文件但 task_list 为空
+                    if not result["has_task_list"]:
+                        result["needs_recovery"] = True
+            except:
+                pass
+
+        # 判断状态
+        if not result["initialized"]:
+            result["state"] = "new_project"
+        elif not result["has_task_list"]:
+            # .long-run-agent 存在但 task_list.json 不存在
+            if result["has_task_files"]:
+                result["state"] = "needs_recovery"
+                result["needs_recovery"] = True
+            else:
+                # 部分初始化，需要重新 init
+                result["state"] = "partial_init"
+        elif result["needs_recovery"]:
+            result["state"] = "needs_recovery"
+        elif result["pending_count"] > 0:
+            result["state"] = "has_pending_tasks"
+        elif result["has_task_list"]:
+            result["state"] = "initialized"
+
+        return result

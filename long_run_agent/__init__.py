@@ -1,8 +1,8 @@
 """
-LRA - AI Agent Task Manager v3.4.0
+LRA - AI Agent Task Manager v3.4.1
 """
 
-__version__ = "3.4.0"
+__version__ = "3.4.1"
 __author__ = "LRA Contributors"
 
 from .config import Config, SafeJson, GitHelper, CURRENT_VERSION

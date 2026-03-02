@@ -29,12 +29,12 @@ except:
 
 
 AGENT_GUIDE = """
-LRA v3.4.0 | AI Agent 任务管理 + 项目分析
+LRA v3.4.1 | AI Agent 任务管理 + 项目分析
 
 🚀 Agent 快速开始
-1. lra init --name <项目名>                    # 初始化项目
-2. lra analyze-project                         # 生成项目文档 + Agent 索引
-3. 读取 .long-run-agent/analysis/index.json    # 快速查找类/函数位置
+1. lra start [--auto] [--task "<描述>"]      # 智能启动（推荐）
+2. lra init --name <项目名>                  # 初始化项目
+3. lra analyze-project                       # 生成项目文档 + Agent 索引
 
 📁 文档输出
    docs/                               # 人类可读文档
@@ -49,13 +49,23 @@ LRA v3.4.0 | AI Agent 任务管理 + 项目分析
    详情：lra template list | lra status-guide
 
 📊 核心命令
+lra start [--auto]                # 智能启动（自动检测状态）
 lra create "<描述>" [--template X]  # 创建任务（默认项目模板）
-lra list [--status X]               # 列表
-lra show <id>                       # 详情
-lra set <id> <status>               # 更新状态
+lra list [--status X]             # 列表（显示下一步建议）
+lra show <id>                     # 详情（显示可用状态流转）
+lra set <id> <status>             # 更新状态
+
+✨ 增强功能
+   • lra list 自动显示下一步建议（claim/heartbeat/completed）
+   • lra show 显示可用状态流转和推荐命令
+   • 超时时自动提醒心跳（>45 分钟）
 
 🔐 锁机制：claim → publish → heartbeat
 💡 增量模式：自动添加"-模块"后缀，永不失败
+
+🛡️  容错功能
+lra recover                       # 从 tasks/目录恢复任务列表
+lra start --auto                  # 自动处理各种项目状态
 
 📚 帮助索引
 lra --help              # 完整帮助
@@ -63,6 +73,7 @@ lra guide               # 详细指南
 lra where               # 文件位置
 lra template list       # 模板列表
 lra status-guide        # 状态流转
+lra start --help        # 智能启动帮助
 lra <cmd> --help        # 命令帮助
 """
 
@@ -111,7 +122,27 @@ class LRACLI:
         return None
 
     def _check_project(self) -> bool:
+        """检查项目是否初始化，智能检测常见问题"""
+        import os
+        from .config import Config, SafeJson
+
         ok, _ = validate_project_initialized()
+        if not ok:
+            # 智能检测：task_list.json 不存在但 tasks/ 目录有文件
+            task_list_path = Config.get_task_list_path()
+            tasks_dir = Config.get_tasks_dir()
+
+            if os.path.exists(tasks_dir):
+                try:
+                    task_files = [f for f in os.listdir(tasks_dir) if f.endswith(".md")]
+                    if task_files:
+                        print(f"⚠️  检测到任务文件但索引损坏")
+                        print(f"   发现 {len(task_files)} 个任务文件")
+                        print(f"💡 建议运行：lra recover")
+                        print()
+                except:
+                    pass
+
         return ok
 
     def cmd_init(self, name: str, template: str, json_mode: bool = False):
@@ -194,10 +225,45 @@ class LRACLI:
                 desc = t.get("description", "")[:60]
                 print(f"{t['id']:12} [{status:12}] [{priority}] [{template:15}] {desc}")
         else:
+            # 普通模式：显示下一步建议
+            locks = self.locks_manager.get_all_locks()
             for t in tasks:
-                print(
-                    f"{t['id']}: {t.get('status', 'pending')} [{t.get('template', 'task')}] {t.get('description', '')[:40]}"
-                )
+                status = t.get("status", "pending")
+                task_id = t["id"]
+                template = t.get("template", "task")
+                desc = t.get("description", "")[:40]
+
+                print(f"{task_id}: {status} [{template}] {desc}")
+
+                # 根据状态显示下一步建议
+                if status == "pending":
+                    print(f"{' ' * 14}→ lra claim {task_id}")
+                elif status == "in_progress":
+                    # 检查心跳时间
+                    lock = locks.get(task_id)
+                    if lock:
+                        from .config import current_time_ms, iso_to_ms
+
+                        last_hb = lock.get("last_heartbeat")
+                        if last_hb:
+                            try:
+                                last_hb_ms = (
+                                    iso_to_ms(last_hb) if isinstance(last_hb, str) else last_hb
+                                )
+                                elapsed_ms = current_time_ms() - last_hb_ms
+                                elapsed_min = elapsed_ms // 60000
+                            except (ValueError, TypeError):
+                                elapsed_min = 0
+                            if elapsed_min > 45:
+                                print(
+                                    f"{' ' * 14}⚠️ 已进行{elapsed_min}分钟 | → lra heartbeat {task_id}"
+                                )
+                            else:
+                                print(f"{' ' * 14}→ lra set {task_id} completed")
+                        else:
+                            print(f"{' ' * 14}→ lra set {task_id} completed")
+                    else:
+                        print(f"{' ' * 14}→ lra set {task_id} completed")
 
     def cmd_create(
         self,
@@ -249,10 +315,18 @@ class LRACLI:
             if json_mode:
                 output({"ok": True, "task": result}, json_mode)
             else:
-                # v3.3.3: 自动降级提示
+                # v3.3.3: 自动降级提示（仅在首次显示）
                 if result.get("_auto_adjusted"):
-                    print(f"💡 增量模式已调整为：'{result.get('description')}'")
-                    print(f"   如需自定义，请使用：lra create '<描述>-模块'\n")
+                    # 检查当前项目是否已经有过增量模式任务（排除刚创建的这个）
+                    tasks = self.task_manager.list_all()
+                    other_incremental = [
+                        t
+                        for t in tasks
+                        if "-模块" in t.get("description", "") and t.get("id") != result.get("id")
+                    ]
+                    if len(other_incremental) == 0:
+                        # 首次创建，显示详细提示
+                        print(f"💡 增量模式：'-模块'自动添加")
 
                 # 显示任务创建成功信息
                 template = result.get("template", "task")
@@ -325,6 +399,16 @@ class LRACLI:
             records = self.records_manager.get(task_id)
             if records:
                 task["records"] = records
+
+        # 添加状态流转建议
+        template = task.get("template", "task")
+        current_status = task.get("status", "pending")
+        transitions = self.template_manager.get_transitions_for_template(template)
+        available = transitions.get(current_status, [])
+
+        task["available_transitions"] = available
+        if available and not json_mode:
+            task["_next_commands"] = [f"lra set {task_id} {s}" for s in available]
 
         output(task, json_mode)
 
@@ -1138,6 +1222,217 @@ class LRACLI:
             print("\n💡 提示：使用 'lra set <task_id> <status>' 更新状态")
             print("   系统会自动提示可用的状态流转选项")
 
+    def cmd_recover(self, json_mode: bool = False):
+        """从 tasks/目录恢复任务列表"""
+        import os
+        from .config import Config
+
+        tasks_dir = Config.get_tasks_dir()
+        if not os.path.exists(tasks_dir):
+            output({"error": "tasks_dir_not_found"}, json_mode)
+            return
+
+        success, result = self.task_manager.recover_task_list()
+
+        if json_mode:
+            output({"ok": success, **result}, json_mode)
+            return
+
+        if success:
+            print(f"✅ 任务列表已恢复")
+            print(f"   恢复数量：{result.get('recovered_count', 0)}")
+            recovered = result.get("recovered_tasks", [])
+            if recovered:
+                print(f"   任务列表：{', '.join(recovered)}")
+        else:
+            error = result.get("error", "unknown_error")
+            print(f"❌ 恢复失败")
+            print(f"   错误：{error}")
+            if error == "no_task_files_found":
+                print(f"\n💡 提示：tasks/ 目录中没有任务文件")
+            elif error == "tasks_dir_not_found":
+                print(f"\n💡 提示：请确保项目已初始化")
+
+    def cmd_start(
+        self,
+        task_desc: str = None,
+        project_name: str = None,
+        auto: bool = False,
+        json_mode: bool = False,
+    ):
+        """智能启动 - 根据项目状态自动引导"""
+
+        # 检测项目状态
+        state = self.task_manager.detect_project_state()
+
+        if json_mode:
+            output(state, json_mode)
+            return
+
+        # 场景 1: 全新项目
+        if state["state"] == "new_project":
+            self._start_new_project(project_name, task_desc, auto)
+
+        # 场景 2: 需要恢复
+        elif state["state"] == "needs_recovery":
+            self._start_needs_recovery(state, auto)
+
+        # 场景 2.5: 部分初始化
+        elif state["state"] == "partial_init":
+            self._start_partial_init(project_name, task_desc, auto)
+
+        # 场景 3: 有待执行任务
+        elif state["state"] == "has_pending_tasks":
+            self._start_has_pending_tasks(state, auto)
+
+        # 场景 4: 已初始化但无待执行任务
+        else:
+            self._start_initialized(state, auto, task_desc)
+
+    def _start_new_project(
+        self,
+        project_name: str = None,
+        task_desc: str = None,
+        auto: bool = False,
+    ):
+        """场景 1: 全新项目"""
+        print("📦 检测到新项目，正在初始化...\n")
+
+        # 自动推断项目名称
+        if not project_name:
+            project_name = os.path.basename(os.getcwd()) or "my-project"
+
+        # 执行初始化
+        success, msg = self.task_manager.init_project(project_name, "task")
+        if not success:
+            print(f"❌ 初始化失败：{msg}")
+            return
+
+        print(f"✅ 项目已初始化：{project_name}")
+        print(f"默认模板：task\n")
+
+        # 自动分析项目
+        print("📊 正在分析项目结构...")
+        try:
+            from .project_analyzer import ProjectAnalyzer
+
+            analyzer = ProjectAnalyzer(os.getcwd())
+            result = analyzer.analyze_project()
+            docs = analyzer.generate_project_doc("docs")
+            print("✅ 分析完成\n")
+        except Exception as e:
+            print(f"⚠️  分析失败：{e}")
+            print("   可以稍后手动运行：lra analyze-project\n")
+
+        # 创建第一个任务
+        if task_desc:
+            print(f"📋 创建第一个任务...")
+            self.cmd_create(task_desc)
+        else:
+            print("📋 下一步:")
+            print(f'   lra create "任务描述"      # 创建第一个任务')
+            print(f"   lra context                # 查看项目状态")
+
+        print()
+
+    def _start_needs_recovery(self, state: Dict[str, Any], auto: bool = False):
+        """场景 2: 需要恢复"""
+        print("⚠️  检测到项目索引损坏\n")
+        print(f"发现 {state.get('task_count', 0)} 个任务文件")
+        print("但 task_list.json 已损坏\n")
+
+        if auto:
+            print("🔄 自动模式：正在恢复...\n")
+            self.cmd_recover()
+        else:
+            print("💡 建议运行：lra recover")
+            print("   将恢复任务到索引中\n")
+
+    def _start_partial_init(
+        self,
+        project_name: str = None,
+        task_desc: str = None,
+        auto: bool = False,
+    ):
+        """场景 2.5: 部分初始化（.long-run-agent 存在但 task_list.json 不存在）"""
+        print("⚠️  检测到项目部分初始化\n")
+        print(".long-run-agent 目录存在，但 task_list.json 缺失")
+        print()
+
+        # 重新初始化
+        if not project_name:
+            project_name = os.path.basename(os.getcwd()) or "my-project"
+
+        if auto:
+            print(f"🔄 自动模式：重新初始化项目为 {project_name}...\n")
+            success, msg = self.task_manager.init_project(project_name, "task")
+            if success:
+                print(f"✅ 项目已初始化：{project_name}")
+
+                if task_desc:
+                    print()
+                    self.cmd_create(task_desc)
+        else:
+            print("💡 建议运行：lra init --name {project_name}")
+            print()
+
+    def _start_has_pending_tasks(self, state: Dict[str, Any], auto: bool = False):
+        """场景 3: 有待执行任务"""
+        pending = state.get("pending_count", 0)
+        in_progress = state.get("in_progress_count", 0)
+
+        print("📊 当前项目状态\n")
+
+        if pending > 0:
+            print(f"待执行：{pending}")
+
+        if in_progress > 0:
+            print(f"进行中：{in_progress}")
+
+        print()
+
+        # 获取可执行任务
+        context = self.task_manager.get_context()
+        can_take = context.get("can_take", [])
+
+        if can_take:
+            print("🎯 可执行任务:")
+            for task in can_take[:5]:  # 只显示前 5 个
+                priority = task.get("priority", "P1")
+                desc = task.get("desc", "")[:50]
+                print(f"   {task['id']}: {desc} ({priority})")
+
+            if len(can_take) > 5:
+                print(f"   ... 还有 {len(can_take) - 5} 个任务")
+
+            print()
+            print("📋 推荐操作:")
+            print(f"   lra claim {can_take[0]['id']}     # 领取最高优先级任务")
+            print(f"   lra context                # 查看详细上下文")
+        else:
+            print("💡 没有可领取的任务")
+            print("   lra list                   # 查看所有任务")
+            print('   lra create "新任务"         # 添加新任务')
+
+        print()
+
+    def _start_initialized(self, state: Dict[str, Any], auto: bool = False, task_desc: str = None):
+        """场景 4: 已初始化但无待执行任务"""
+        print("📊 当前项目状态\n")
+        print(f"总任务：{state.get('task_count', 0)}")
+        print(f"进行中：{state.get('in_progress_count', 0)}")
+        print()
+
+        if task_desc:
+            print("📋 创建新任务...\n")
+            self.cmd_create(task_desc)
+        else:
+            print("💡 所有任务都在进行中或已完成")
+            print("   lra list                   # 查看所有任务")
+            print('   lra create "新任务"         # 添加新任务')
+            print("   lra context                # 查看上下文")
+            print()
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -1374,6 +1669,17 @@ def main():
     # v3.3.0: status-guide
     subparsers.add_parser("status-guide", help="Show state transition guide for all templates")
 
+    # v3.4.1: recover - 恢复任务列表
+    subparsers.add_parser("recover", help="Recover task list from tasks/ directory")
+
+    # v3.4.1: start - 智能启动
+    start_p = subparsers.add_parser(
+        "start", help="Smart start - auto-detect project state and guide"
+    )
+    start_p.add_argument("--task", dest="task_desc", help="First task description")
+    start_p.add_argument("--name", help="Project name (for new projects)")
+    start_p.add_argument("--auto", action="store_true", help="Auto mode, skip all prompts")
+
     args = parser.parse_args()
     json_mode = getattr(args, "json", False)
     cli = LRACLI()
@@ -1478,6 +1784,10 @@ def main():
         cli.cmd_index(getattr(args, "content", False), json_mode)
     elif args.command == "status-guide":
         cli.cmd_status_guide(json_mode)
+    elif args.command == "recover":
+        cli.cmd_recover(json_mode)
+    elif args.command == "start":
+        cli.cmd_start(args.task_desc, args.name, args.auto, json_mode)
     else:
         parser.print_help()
 
