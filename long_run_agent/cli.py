@@ -29,12 +29,21 @@ except:
 
 
 AGENT_GUIDE = """
-LRA v3.3.3 | AI Agent 任务管理
+LRA v3.4.0 | AI Agent 任务管理 + 项目分析
 
-🚀 快速开始
-1. lra init --name <项目名> --template <模板>
-2. lra context  # 获取可领取任务
-3. lra claim <id> && lra set <id> in_progress
+🚀 Agent 快速开始
+1. lra init --name <项目名>                    # 初始化项目
+2. lra analyze-project                         # 生成项目文档 + Agent 索引
+3. 读取 .long-run-agent/analysis/index.json    # 快速查找类/函数位置
+
+📁 文档输出
+   docs/                               # 人类可读文档
+   .long-run-agent/analysis/index.json # Agent 快速索引（类/函数/文件）
+
+🤖 Agent 索引使用
+   lra where                           # 查看所有关键文件位置
+   lra index                           # 输出索引文件路径
+   lra index --content                 # 输出完整索引内容
 
 📋 模板：task|code-module|doc-update|data-pipeline|novel-chapter
    详情：lra template list | lra status-guide
@@ -51,6 +60,7 @@ lra set <id> <status>               # 更新状态
 📚 帮助索引
 lra --help              # 完整帮助
 lra guide               # 详细指南
+lra where               # 文件位置
 lra template list       # 模板列表
 lra status-guide        # 状态流转
 lra <cmd> --help        # 命令帮助
@@ -114,8 +124,11 @@ class LRACLI:
         if success:
             print(f"✅ 项目已初始化：{name}\n")
             print(f"默认模板：{template}")
-            print(f"\n下一步：")
-            print(f'   lra create "任务描述"  # 使用 {template} 模板')
+            print(f"\n📋 下一步:")
+            print(f"   lra analyze-project        # 生成项目文档（推荐）")
+            print(f"   lra context                # 查看项目状态")
+            print(f'   lra create "任务描述"      # 创建第一个任务')
+            print(f"\n🤖 Agent 索引: .long-run-agent/analysis/index.json")
 
     def cmd_context(self, output_limit: str = "8k", json_mode: bool = False):
         if not self._check_project():
@@ -883,31 +896,170 @@ class LRACLI:
                 print(f"   {i}. {suggestion}")
             print()
 
-    def cmd_analyze_module(self, module_name: str, json_mode: bool = False):
-        """分析指定模块"""
+    def cmd_analyze_module(
+        self, module_name: str, output_doc: bool = False, json_mode: bool = False
+    ):
+        """分析指定模块的代码结构"""
         if not self._check_project():
             output({"error": "not_initialized"}, json_mode)
             return
 
-        # 简单实现：查找包含模块名的任务
-        tasks = self.task_manager.list_all()
-        module_tasks = [t for t in tasks if module_name.lower() in t.get("description", "").lower()]
+        try:
+            from .project_analyzer import ProjectAnalyzer
 
-        output(
-            {
-                "module": module_name,
-                "tasks": [
-                    {
-                        "id": t["id"],
-                        "desc": t.get("description", "")[:50],
-                        "status": t.get("status"),
-                    }
-                    for t in module_tasks
-                ],
-                "count": len(module_tasks),
-            },
-            json_mode,
-        )
+            analyzer = ProjectAnalyzer(os.getcwd())
+            result = analyzer.analyze_module(module_name)
+
+            if not result:
+                output({"error": "module_not_found", "module": module_name}, json_mode)
+                return
+
+            if output_doc:
+                doc_path = analyzer.generate_module_doc(module_name)
+                result["doc_path"] = doc_path
+
+            output(result, json_mode)
+
+        except Exception as e:
+            output({"error": str(e)}, json_mode)
+
+    def cmd_analyze_project(
+        self,
+        output_dir: str = "docs",
+        create_tasks: bool = True,
+        force: bool = False,
+        json_mode: bool = False,
+    ):
+        """分析整个项目结构"""
+        if not self._check_project():
+            output({"error": "not_initialized"}, json_mode)
+            return
+
+        try:
+            from .project_analyzer import ProjectAnalyzer
+
+            analyzer = ProjectAnalyzer(os.getcwd())
+
+            summary_path = os.path.join(".long-run-agent", "analysis", "summary.json")
+            if os.path.exists(summary_path) and not force:
+                output(
+                    {"info": "analysis_exists", "hint": "use --force to re-analyze"},
+                    json_mode,
+                )
+                return
+
+            result = analyzer.analyze_project()
+
+            docs = analyzer.generate_project_doc(output_dir)
+            result["docs"] = docs
+
+            summary = analyzer.generate_summary_json()
+            result["summary_path"] = summary
+
+            if create_tasks:
+                created_tasks = []
+                for module in result.get("modules", []):
+                    success, task = self.task_manager.create(
+                        description=f"完善 {module['name']} 模块文档",
+                        template="doc-update",
+                        priority="P2",
+                        skip_system_check=True,
+                        variables={
+                            "module": module["name"],
+                            "update_scope": "full",
+                            "doc_coverage": module.get("doc_coverage", 0),
+                        },
+                    )
+                    if success:
+                        created_tasks.append(task["id"])
+                result["created_tasks"] = created_tasks
+
+            if not json_mode:
+                print("✅ 项目分析完成")
+                print(f"   模块数：{len(result.get('modules', []))}")
+                print(f"   总文件：{result.get('total_files', 0)}")
+                print(f"   总代码行：{result.get('total_lines', 0)}")
+                print(f"   文档目录：{output_dir}/")
+                if create_tasks:
+                    print(f"   创建任务：{len(result.get('created_tasks', []))}")
+                print(f"\n📁 文档已生成:")
+                print(f"   docs/MODULES.md                    # 项目总览")
+                print(f"   .long-run-agent/analysis/index.json # Agent 快速索引")
+                print(f"\n🤖 Agent 使用:")
+                print(f'   类查找: index["classes"]["类名"]')
+                print(f'   函数查找: index["functions"]["函数名"]')
+
+            output(result, json_mode)
+
+        except Exception as e:
+            output({"error": str(e)}, json_mode)
+
+    def cmd_where(self, json_mode: bool = False):
+        """显示所有关键文件位置"""
+        if not self._check_project():
+            output({"error": "not_initialized"}, json_mode)
+            return
+
+        project_name = os.path.basename(os.getcwd())
+        config_path = os.path.join(".long-run-agent", "config.yaml")
+        if os.path.exists(config_path):
+            try:
+                import yaml
+
+                with open(config_path, "r", encoding="utf-8") as f:
+                    config = yaml.safe_load(f)
+                    if config and "project" in config:
+                        project_name = config["project"].get("name", project_name)
+            except:
+                pass
+
+        locations = {
+            "project": project_name,
+            "agent_index": ".long-run-agent/analysis/index.json",
+            "summary": ".long-run-agent/analysis/summary.json",
+            "docs": "docs/",
+            "task_list": ".long-run-agent/task_list.json",
+            "config": ".long-run-agent/config.yaml",
+            "locks": ".long-run-agent/locks.json",
+        }
+
+        if json_mode:
+            output(locations, json_mode)
+        else:
+            print("📁 LRA 文件位置\n")
+            print(f"   Agent 索引:  {locations['agent_index']}")
+            print(f"   分析报告:    {locations['summary']}")
+            print(f"   文档目录:    {locations['docs']}")
+            print(f"   任务列表:    {locations['task_list']}")
+            print(f"   配置文件:    {locations['config']}")
+            print(f"   锁文件:      {locations['locks']}")
+
+    def cmd_index(self, show_content: bool = False, json_mode: bool = False):
+        """输出 Agent 索引路径或内容"""
+        if not self._check_project():
+            output({"error": "not_initialized"}, json_mode)
+            return
+
+        index_path = ".long-run-agent/analysis/index.json"
+
+        if not os.path.exists(index_path):
+            output(
+                {"error": "index_not_found", "hint": "run 'lra analyze-project' first"}, json_mode
+            )
+            return
+
+        if show_content:
+            try:
+                with open(index_path, "r", encoding="utf-8") as f:
+                    content = json.load(f)
+                output(content, json_mode)
+            except Exception as e:
+                output({"error": str(e)}, json_mode)
+        else:
+            if json_mode:
+                output({"index_path": index_path}, json_mode)
+            else:
+                print(index_path)
 
     def cmd_status_guide(self, json_mode: bool = False):
         """显示状态流转指南"""
@@ -1002,8 +1154,8 @@ def main():
     init_p.add_argument("--name", required=True, help="Project name")
     init_p.add_argument(
         "--template",
-        required=True,
-        help="Default template (task|code-module|doc-update|data-pipeline|novel-chapter)",
+        default="task",
+        help="Default template (default: task)",
     )
 
     # context
@@ -1190,8 +1342,34 @@ def main():
     )
 
     # v3.3.0: analyze-module
-    am_p = subparsers.add_parser("analyze-module", help="Analyze specific module")
+    am_p = subparsers.add_parser("analyze-module", help="Analyze specific module code structure")
     am_p.add_argument("module_name", help="Module name to analyze")
+    am_p.add_argument("--output-doc", action="store_true", help="Generate module documentation")
+
+    # v3.3.0: analyze-project
+    ap_p = subparsers.add_parser("analyze-project", help="Analyze entire project structure")
+    ap_p.add_argument("--output-dir", default="docs", help="Documentation output directory")
+    ap_p.add_argument(
+        "--create-tasks",
+        action="store_true",
+        default=True,
+        dest="create_tasks",
+        help="Create module analysis tasks (default)",
+    )
+    ap_p.add_argument(
+        "--no-create-tasks",
+        action="store_false",
+        dest="create_tasks",
+        help="Do not create tasks",
+    )
+    ap_p.add_argument("--force", action="store_true", help="Force re-analysis")
+
+    # v3.4.0: where - 显示文件位置
+    subparsers.add_parser("where", help="Show key file locations")
+
+    # v3.4.0: index - 输出 Agent 索引
+    idx_p = subparsers.add_parser("index", help="Output agent index path or content")
+    idx_p.add_argument("--content", action="store_true", help="Output full index content")
 
     # v3.3.0: status-guide
     subparsers.add_parser("status-guide", help="Show state transition guide for all templates")
@@ -1291,7 +1469,13 @@ def main():
     elif args.command == "system-check":
         cli.cmd_system_check(args.full, args.report, args.force, json_mode)
     elif args.command == "analyze-module":
-        cli.cmd_analyze_module(args.module_name, json_mode)
+        cli.cmd_analyze_module(args.module_name, getattr(args, "output_doc", False), json_mode)
+    elif args.command == "analyze-project":
+        cli.cmd_analyze_project(args.output_dir, args.create_tasks, args.force, json_mode)
+    elif args.command == "where":
+        cli.cmd_where(json_mode)
+    elif args.command == "index":
+        cli.cmd_index(getattr(args, "content", False), json_mode)
     elif args.command == "status-guide":
         cli.cmd_status_guide(json_mode)
     else:
