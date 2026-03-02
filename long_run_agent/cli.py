@@ -96,11 +96,35 @@ def output(data: Any, json_mode: bool = False):
 class LRACLI:
     def __init__(self):
         self.task_manager = TaskManager()
-        self.template_manager = TemplateManager()
-        self.records_manager = RecordsManager()
-        self.locks_manager = LocksManager()
-        self.batch_lock_manager = BatchLockManager()
+        self._template_manager = None
+        self._records_manager = None
+        self._locks_manager = None
+        self._batch_lock_manager = None
         self.system_check_available = HAS_SYSTEM_CHECK
+
+    @property
+    def template_manager(self):
+        if self._template_manager is None:
+            self._template_manager = TemplateManager()
+        return self._template_manager
+
+    @property
+    def records_manager(self):
+        if self._records_manager is None:
+            self._records_manager = RecordsManager()
+        return self._records_manager
+
+    @property
+    def locks_manager(self):
+        if self._locks_manager is None:
+            self._locks_manager = LocksManager()
+        return self._locks_manager
+
+    @property
+    def batch_lock_manager(self):
+        if self._batch_lock_manager is None:
+            self._batch_lock_manager = BatchLockManager()
+        return self._batch_lock_manager
 
     def _get_tip_for_command(self, cmd: str, description: str = "") -> Optional[str]:
         """获取命令相关提示（v3.3.3 新增）"""

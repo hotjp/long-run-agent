@@ -15,8 +15,14 @@ from .template_manager import TemplateManager
 class TaskManager:
     def __init__(self):
         self.task_list_path = Config.get_task_list_path()
-        self.template_manager = TemplateManager()
+        self._template_manager = None
         self.system_check_report = None
+
+    @property
+    def template_manager(self):
+        if self._template_manager is None:
+            self._template_manager = TemplateManager()
+        return self._template_manager
 
     def _load(self) -> Optional[Dict[str, Any]]:
         return SafeJson.read(self.task_list_path)
