@@ -587,8 +587,15 @@ class TaskManager:
 
         created = []
         for i, item in enumerate(split_plan):
-            desc = item.get("desc", f"Part {i + 1}")
-            output_req = item.get("output_req", "8k")
+            if isinstance(item, str):
+                desc = item
+                output_req = "8k"
+            elif isinstance(item, dict):
+                desc = item.get("desc", f"Part {i + 1}")
+                output_req = item.get("output_req", "8k")
+            else:
+                desc = f"Part {i + 1}"
+                output_req = "8k"
 
             success, result = self.create(
                 description=desc,

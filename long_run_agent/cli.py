@@ -31,50 +31,26 @@ except:
 AGENT_GUIDE = """
 LRA v3.4.1 | AI Agent 任务管理 + 项目分析
 
-🚀 Agent 快速开始
-1. lra start [--auto] [--task "<描述>"]      # 智能启动（推荐）
-2. lra init --name <项目名>                  # 初始化项目
-3. lra analyze-project                       # 生成项目文档 + Agent 索引
+🚀 快速开始
+   lra start                           # 智能启动（推荐）
+   lra init --name <项目名>             # 初始化项目
+   lra analyze-project                 # 生成文档+索引
 
-📁 文档输出
-   docs/                               # 人类可读文档
-   .long-run-agent/analysis/index.json # Agent 快速索引（类/函数/文件）
+📂 常用命令（按工作流）
+   项目: start | init | context | analyze-project
+   任务: list | create | show | set | split | search
+   执行: claim | heartbeat | checkpoint | pause | resume | publish
+   依赖: deps | check-blocked
+   批量: batch set|delete|claim
 
-🤖 Agent 索引使用
-   lra where                           # 查看所有关键文件位置
-   lra index                           # 输出索引文件路径
-   lra index --content                 # 输出完整索引内容
+🔐 锁机制: claim → heartbeat → publish
+💡 提示: list自动显示下一步，show显示状态流转
 
-📋 模板：task|code-module|doc-update|data-pipeline|novel-chapter
-   详情：lra template list | lra status-guide
-
-📊 核心命令
-lra start [--auto]                # 智能启动（自动检测状态）
-lra create "<描述>" [--template X]  # 创建任务（默认项目模板）
-lra list [--status X]             # 列表（显示下一步建议）
-lra show <id>                     # 详情（显示可用状态流转）
-lra set <id> <status>             # 更新状态
-
-✨ 增强功能
-   • lra list 自动显示下一步建议（claim/heartbeat/completed）
-   • lra show 显示可用状态流转和推荐命令
-   • 超时时自动提醒心跳（>45 分钟）
-
-🔐 锁机制：claim → publish → heartbeat
-💡 增量模式：自动添加"-模块"后缀，永不失败
-
-🛡️  容错功能
-lra recover                       # 从 tasks/目录恢复任务列表
-lra start --auto                  # 自动处理各种项目状态
-
-📚 帮助索引
-lra --help              # 完整帮助
-lra guide               # 详细指南
-lra where               # 文件位置
-lra template list       # 模板列表
-lra status-guide        # 状态流转
-lra start --help        # 智能启动帮助
-lra <cmd> --help        # 命令帮助
+📚 帮助
+   lra <cmd> --help        命令详情
+   lra status-guide        状态流转图
+   lra template list       模板列表
+   lra where               文件位置
 """
 
 
@@ -1497,7 +1473,9 @@ def main():
     create_p.add_argument("--dependencies", default=None, help="Comma-separated task IDs")
     create_p.add_argument("--dependency-type", default="all", choices=["all", "any"])
     create_p.add_argument("--deadline", default=None)
-    create_p.add_argument("--variables", default=None, help="JSON string of template variables")
+    create_p.add_argument(
+        "--variables", default=None, help='JSON: \'{"key":"value"}\' - see lra template show <name>'
+    )
 
     # show
     show_p = subparsers.add_parser("show", help="Show task")
@@ -1510,9 +1488,12 @@ def main():
     set_p.add_argument("status")
 
     # split
-    split_p = subparsers.add_parser("split", help="Split task")
+    split_p = subparsers.add_parser("split", help="Split task into subtasks")
     split_p.add_argument("task_id")
-    split_p.add_argument("--plan", help="JSON array of split parts")
+    split_p.add_argument(
+        "--plan",
+        help='JSON array: \'["task1","task2"]\' or \'[{"desc":"task","output_req":"8k"}]\'',
+    )
 
     # claim
     subparsers.add_parser("claim", help="Claim task").add_argument("task_id")
