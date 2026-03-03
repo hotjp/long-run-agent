@@ -10,6 +10,8 @@
 
 **项目路径**: `/Users/kingj/.openclaw/workspace/long-run-agent`
 
+**当前版本**: v3.4.1 (v4.0 功能在 cli_extensions.py 中但未集成)
+
 ## 测试要求
 
 ### 🚫 限制
@@ -19,15 +21,283 @@
 
 ### ✅ 目标
 1. 摸索如何使用这个工具
-2. 测试3个场景（见下方）
+2. 测试未测试的命令和场景
 3. 记录遇到的所有卡点和困惑
 4. 修复发现的问题
 
-### 📋 测试场景
+### 📋 已测试的命令（上一个agent）
 
-1. **空项目** - 全新空文件夹，从零开始
-2. **老项目** - 已有代码的项目
-3. **接手项目** - 别人初始化的项目
+✅ **核心工作流** (9个): start, init, context, list, create, show, set, split, claim  
+✅ **查询命令** (6个): search, guide, status-guide, where, index, deps  
+✅ **项目管理** (3个): analyze-project, system-check, recover  
+✅ **任务执行** (3个): pause, checkpoint, resume  
+⚠️ **部分测试** (2个): template list, batch claim
+
+**测试覆盖率**: 74% (23/31)
+
+## 🎯 测试场景设计
+
+### 场景1: 任务协作与锁机制（高优先级）
+
+**目标**: 测试多agent协作场景下的锁机制
+
+**测试命令**: 
+- publish - 发布子任务
+- heartbeat - 心跳续期
+- batch-lock - 批量锁管理
+
+**测试流程**:
+```bash
+# 1. 创建父任务并拆分
+lra create "Web应用开发"
+lra split <parent_id> --count 3
+
+# 2. 认领父任务
+lra claim <parent_id>
+
+# 3. 发布子任务（测试点：子任务状态变化）
+lra publish <parent_id>
+lra list  # 查看子任务是否可被认领
+
+# 4. 测试心跳（测试点：锁续期）
+lra claim <task_id>
+lra heartbeat <task_id>
+lra show <task_id>  # 查看锁状态
+
+# 5. 测试批量锁（测试点：并发控制）
+lra batch-lock status
+lra batch-lock acquire --operation batch_claim --task-ids task_001,task_002
+lra batch-lock status
+lra batch-lock release
+```
+
+**预期结果**:
+- publish 后子任务状态变为可认领
+- heartbeat 成功续期锁
+- batch-lock 能正确管理并发操作
+
+---
+
+### 场景2: 依赖管理与阻塞检测（高优先级）
+
+**目标**: 测试复杂依赖关系和阻塞处理
+
+**测试命令**:
+- check-blocked - 检查阻塞
+- deps - 依赖查看（已测试但需补充）
+
+**测试流程**:
+```bash
+# 1. 创建依赖链
+lra create "数据库设计"
+lra create "API接口"
+lra create "前端页面"
+lra create "集成测试" --dependencies task_001,task_002,task_003
+
+# 2. 查看依赖
+lra deps task_004
+lra deps task_004 --dependents  # 查看谁依赖它
+
+# 3. 检查阻塞
+lra check-blocked  # task_004 应该被阻塞
+
+# 4. 完成前置任务
+lra claim task_001
+lra set task_001 in_progress
+lra set task_001 completed
+lra check-blocked  # 应该仍然阻塞（还有2个未完成）
+
+# 5. 完成所有前置
+lra set task_002 completed
+lra set task_003 completed
+lra check-blocked  # 应该不再阻塞
+lra show task_004  # 检查状态
+```
+
+**预期结果**:
+- 依赖任务被正确标记为 blocked
+- 完成前置任务后自动解除阻塞
+- deps 命令正确显示依赖关系
+
+---
+
+### 场景3: 模板系统与自定义（中优先级）
+
+**目标**: 测试模板系统的完整功能
+
+**测试命令**:
+- template show - 查看模板详情
+- template create - 创建自定义模板
+- template delete - 删除模板
+
+**测试流程**:
+```bash
+# 1. 查看现有模板
+lra template list
+lra template show task
+lra template show code-module  # 查看有测试流程的模板
+
+# 2. 创建自定义模板
+lra template create my-feature --from task
+# 手动编辑模板文件（如果需要）
+lra create "测试自定义模板" --template my-feature
+
+# 3. 测试模板的状态流转
+lra show <task_id>  # 查看可用状态流转
+lra set <task_id> in_progress
+
+# 4. 删除自定义模板
+lra template delete my-feature
+lra template list  # 确认删除
+```
+
+**预期结果**:
+- template show 显示完整的模板定义
+- 自定义模板能正常使用
+- 模板状态流转正确
+
+---
+
+### 场景4: 批量操作与优先级（中优先级）
+
+**目标**: 测试批量操作和优先级管理
+
+**测试命令**:
+- batch set - 批量更新状态
+- batch delete - 批量删除
+- set-priority - 设置优先级
+
+**测试流程**:
+```bash
+# 1. 创建多个任务
+for i in {1..5}; do lra create "任务$i"; done
+
+# 2. 设置优先级
+lra set-priority task_001 P0  # 最高优先级
+lra set-priority task_002 P0
+lra set-priority task_003 P1
+lra context  # 查看优先级排序
+
+# 3. 批量认领
+lra batch claim task_001 task_002
+
+# 4. 批量更新状态
+lra batch set task_001 task_002 in_progress
+lra list  # 查看状态
+
+# 5. 批量删除
+lra create "临时任务1"
+lra create "临时任务2"
+lra batch delete <temp_id1> <temp_id2>
+lra list  # 确认删除
+```
+
+**预期结果**:
+- set-priority 正确影响任务排序
+- batch set 批量更新状态成功
+- batch delete 批量删除成功
+
+---
+
+### 场景5: 记录与变更跟踪（中优先级）
+
+**目标**: 测试记录功能
+
+**测试命令**:
+- record - 记录变更
+
+**测试流程**:
+```bash
+# 1. 查看record帮助
+lra record --help
+
+# 2. 创建feature记录
+lra record add feature_001 --desc "用户认证功能"
+
+# 3. 记录git提交（如果有git仓库）
+lra record add feature_001 --commit "abc123" --desc "实现登录API"
+
+# 4. 查看记录
+lra record list feature_001
+lra record show feature_001
+
+# 5. 查看时间线
+lra record timeline feature_001
+```
+
+**预期结果**:
+- record 命令能正确记录变更
+- 能查询历史记录
+- 时间线显示正确
+
+---
+
+### 场景6: 高级功能（低优先级）
+
+**目标**: 测试其他未测试的命令
+
+**测试命令**:
+- analyze-module - 模块分析
+- version - 版本信息
+
+**测试流程**:
+```bash
+# 1. 查看版本
+lra version
+
+# 2. 分析单个模块
+lra analyze-module lra  # 分析lra模块
+lra analyze-module cli  # 分析cli模块
+
+# 3. 对比analyze-project
+lra analyze-project --force
+```
+
+**预期结果**:
+- version 显示正确的版本号
+- analyze-module 输出模块级别的分析
+- 与 analyze-project 结果对比
+
+---
+
+## 🔍 特别关注点
+
+### 1. v4.0 新功能检查
+
+**重要**: 检查以下命令是否已集成到主CLI
+
+```bash
+# 尝试运行这些命令，看是否可用
+lra status           # 项目进度可视化
+lra orientation      # 上下文重建
+lra regression-test  # 回归测试
+lra browser-test     # 浏览器测试
+lra quality-check    # 质量检查
+```
+
+**如果不可用**:
+- 记录为问题：v4.0功能未集成
+- 查看 `lra/cli_extensions.py` 了解这些命令
+- 尝试手动集成或报告问题
+
+### 2. 锁机制完整性
+
+- 测试锁冲突处理
+- 测试锁过期自动释放
+- 测试批量锁的事务性
+
+### 3. 依赖管理
+
+- 测试循环依赖检测
+- 测试依赖类型（all vs any）
+- 测试复杂依赖图
+
+### 4. 边界条件
+
+- 空任务列表
+- 不存在的任务ID
+- 无效的状态转换
+- 重复操作
 
 ## 开始方式
 
@@ -39,22 +309,42 @@ pip install -e . --quiet
 # 查看帮助
 lra --help
 
-# 自己探索命令...
+# 查看具体命令帮助
+lra <command> --help
+
+# 创建测试目录（建议）
+mkdir -p /tmp/lra-test-advanced
+cd /tmp/lra-test-advanced
+lra start --name test-project
 ```
 
 ## 记录要求
 
-记录你遇到的所有问题：
+### 问题记录格式
 
 ```markdown
 ## 问题记录
 
 ### 问题1: <简短描述>
-- 场景: 空/老/接手项目
+- 场景: 场景X / 独立发现
 - 命令: `lra xxx`
-- 现象: 发生了什么
+- 现象: 详细描述发生了什么
 - 影响: 严重/中等/轻微
-- 修复: 如何修复的
+- 修复: 如何修复的（如果修复了）
+```
+
+### 测试覆盖记录
+
+```markdown
+## 测试覆盖
+
+### 场景1: 任务协作与锁机制
+- [x] publish 命令测试
+- [x] heartbeat 命令测试
+- [x] batch-lock 命令测试
+- [ ] 锁冲突处理
+- [ ] 锁过期处理
+...
 ```
 
 ## 修复原则
@@ -71,14 +361,22 @@ lra --help
 - 友好提示 - 告诉用户怎么办
 - 自动处理 - 能推断的不要求输入
 
-## 输出
+## 输出要求
 
 测试完成后，提供：
 
-1. **问题列表** - 发现的所有问题
-2. **修复内容** - 如何修复的
-3. **体验评分** - 1-5星
-4. **改进建议** - 如何做得更好
+1. **测试覆盖报告** - 列出测试了哪些场景和命令
+2. **问题列表** - 发现的所有问题
+3. **v4.0状态** - v4.0新功能的集成状态
+4. **修复内容** - 如何修复的
+5. **体验评分** - 1-5星（分场景评分）
+6. **改进建议** - 如何做得更好
+
+## 参考资料
+
+- **测试覆盖报告**: `TEST_COVERAGE.md`
+- **改进报告**: `IMPROVEMENT_REPORT.md`
+- **问题报告**: `TEST_ISSUES.md`
 
 ---
 
@@ -86,5 +384,7 @@ lra --help
 - 从Agent视角评估，不是开发者视角
 - 记录真实的困惑，不要带着预设
 - 让工具更友好，减少错误和困惑
+- 重点关注锁机制、依赖管理、批量操作
+- 检查v4.0新功能的集成状态
 
 开始吧！
