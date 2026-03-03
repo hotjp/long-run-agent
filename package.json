@@ -1,7 +1,7 @@
 {
-  "name": "long-run-agent",
-  "version": "2.0.0",
-  "description": "A powerful framework for managing long-running AI Agent tasks",
+  "name": "lra",
+  "version": "4.0.0",
+  "description": "A powerful framework for managing long-running AI Agent tasks with quality assurance",
   "keywords": [
     "ai",
     "agent",
@@ -9,9 +9,11 @@
     "task-management",
     "feature-tracking",
     "development-tools",
-    "cli"
+    "cli",
+    "quality-assurance",
+    "regression-testing"
   ],
-  "author": "Long-Running Agent Contributors",
+  "author": "LRA Contributors",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -27,7 +29,7 @@
   "files": [
     "bin/",
     "scripts/",
-    "long_run_agent/",
+    "lra/",
     "pyproject.toml",
     "README.md",
     "README-EN.md",

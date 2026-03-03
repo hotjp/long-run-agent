@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * LRA - Long-Running Agent CLI wrapper
+ * LRA v4.0 - Long-Running Agent CLI wrapper
  * This script provides a Node.js entry point that calls the Python CLI
  */
 
@@ -31,7 +31,7 @@ const python = findPython();
 
 // Get the package directory (where package.json is)
 const packageDir = path.resolve(__dirname, '..');
-const pythonPackageDir = path.join(packageDir, 'long_run_agent');
+const pythonPackageDir = path.join(packageDir, 'lra');
 
 // Check if Python package exists locally
 const args = process.argv.slice(2);
@@ -47,7 +47,7 @@ if (fs.existsSync(pythonPackageDir)) {
   });
 } else {
   // Try to run from installed Python package
-  child = spawn(python, ['-m', 'long_run_agent', ...args], {
+  child = spawn(python, ['-m', 'lra', ...args], {
     stdio: 'inherit',
     env: { ...process.env }
   });
@@ -60,6 +60,6 @@ child.on('close', (code) => {
 child.on('error', (err) => {
   console.error('❌ Failed to start LRA:', err.message);
   console.error('\nPlease ensure Python 3.8+ is installed and accessible.');
-  console.error('Install LRA with: pip install long-run-agent');
+  console.error('Install LRA with: pip install lra');
   process.exit(1);
 });

@@ -3,21 +3,21 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "long-run-agent"
-version = "3.4.0"
-description = "A powerful framework for managing long-running AI Agent tasks"
+name = "lra"
+version = "4.0.0"
+description = "A powerful framework for managing long-running AI Agent tasks with quality assurance"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.8"
 authors = [
-    {name = "Long-Running Agent Contributors"}
+    {name = "LRA Contributors"}
 ]
 dependencies = [
     "jinja2>=3.0",
     "pyyaml>=6.0",
 ]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
@@ -40,10 +40,10 @@ dev = [
     "ruff>=0.1.0",
     "mypy>=1.0",
 ]
-full = ["pytest>=7.0"]
+full = ["pytest>=7.0", "playwright>=1.40.0"]
 
 [project.scripts]
-lra = "long_run_agent.cli:main"
+lra = "lra.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/clawdbot-ai/long-run-agent"
@@ -52,10 +52,10 @@ Repository = "https://github.com/clawdbot-ai/long-run-agent"
 Issues = "https://github.com/clawdbot-ai/long-run-agent/issues"
 
 [tool.setuptools]
-packages = ["long_run_agent"]
+packages = ["lra"]
 
 [tool.setuptools.package-data]
-long_run_agent = ["py.typed"]
+lra = ["py.typed", "prompts/*.md"]
 
 [tool.black]
 line-length = 100

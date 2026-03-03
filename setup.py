@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Setup script for long-run-agent
-Legacy setup.py for backwards compatibility
+Setup script for lra (Long-Run-Agent)
+v4.0+ uses 'lra' package name
 """
 
 from setuptools import setup

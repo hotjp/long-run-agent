@@ -1,6 +1,6 @@
-# LRA - AI Agent Task Manager v3.3
+# LRA - AI Agent Task Manager v4.0
 
-**通用 AI Agent 任务管理框架 - Agent 自治式初始化**
+**通用 AI Agent 任务管理框架 + 质量保障系统**
 
 ## 核心特性
 
@@ -11,18 +11,22 @@
 - **多 Agent 协作**：层级锁机制，支持大模型拆分任务、小模型并行开发
 - **输出限制感知**：根据模型输出能力推荐/拆分任务
 - **🆕 Agent 自治初始化** (v3.3.0): 自动预检 + 增量处理 + 文档闭环
+- **✨ 质量保障系统** (v4.0.0): 验证机制 + 回归测试 + 代码质量检查
 
 ## 安装
 
 ```bash
 # 安装（自动包含 Jinja2）
-pip install long-run-agent
+pip install lra
 
 # 开发环境
-pip install long-run-agent[dev]
+pip install lra[dev]
+
+# 完整安装（包含浏览器测试支持）
+pip install lra[full]
 ```
 
-**注意**：v3.2.0+ Jinja2 已自动安装，无需额外操作。
+**注意**：v4.0+ 包名已从 `long-run-agent` 改为 `lra`。
 
 ## 快速开始
 
@@ -33,6 +37,12 @@ lra init --name "My Project"
 
 # Agent 获取上下文
 lra context --output-limit 8k
+
+# 🆕 Agent 上下文重建（推荐）
+lra orientation
+
+# 🆕 查看项目进度
+lra status
 ```
 
 ## 命令参考
@@ -416,4 +426,130 @@ system_check:
 ## 链接
 
 - GitHub: https://github.com/hotjp/long-run-agent
-- PyPI: https://pypi.org/project/long-run-agent/
+- PyPI: https://pypi.org/project/lra/
+
+## 🆕 v4.0 新功能
+
+### 质量保障系统
+
+v4.0 新增了完整的质量保障系统，确保任务完成质量：
+
+#### 1. 验证前置机制
+
+任务完成前必须提供验证证据：
+
+```markdown
+## 验证证据（完成前必填）
+
+- [ ] **实现证明**: [描述实现]
+- [ ] **测试验证**: [如何测试]
+- [ ] **影响范围**: [影响的功能]
+
+### 测试步骤
+1. [步骤1]
+2. [步骤2]
+```
+
+#### 2. 回归测试
+
+```bash
+# 运行回归测试
+lra regression-test
+
+# 查看报告
+lra regression-test --report
+
+# 测试特定模板
+lra regression-test --template code-module
+```
+
+#### 3. 浏览器自动化测试
+
+```bash
+# 检查任务验证状态
+lra browser-test task_001
+
+# 生成测试脚本
+lra browser-test task_001 --script
+```
+
+#### 4. 代码质量检查
+
+```bash
+# 运行质量检查
+lra quality-check
+
+# 查看报告
+lra quality-check --report
+```
+
+### Agent 工作流优化
+
+#### 上下文重建协议
+
+```bash
+# Agent 专用：完整上下文重建
+lra orientation
+```
+
+提供：
+- 工作目录
+- 项目结构
+- 最近提交
+- 任务进度
+- Agent 索引位置
+
+#### 进度可视化
+
+```bash
+# 查看项目进度
+lra status
+```
+
+输出示例：
+```
+📊 项目进度: 45/200 (22.5%)
+
+[████████░░░░░░░░░░░░░░░░░░░░░░░░░░]
+
+📈 任务分布:
+  ✅ Completed:   45 █████████████████████████
+  🔄 In Progress:  5 ███
+  ⏳ Pending:    150 ████████████████
+
+⏱️  预估剩余时间: 12.5 小时
+```
+
+### 统一提示词模板
+
+查看完整的 Agent 工作流程：
+```bash
+cat lra/prompts/agent_prompt.md
+```
+
+13步标准化工作流，包含完整的故障排除指南。
+
+## 命令参考
+
+### 核心命令
+
+| 命令 | 用途 |
+|------|------|
+| `lra init --name <name>` | 初始化项目（默认 task 模板） |
+| `lra context [--output-limit Xk]` | 获取项目状态 + 可领取任务 |
+| `lra list [--status X] [--template X]` | 列出任务 |
+| `lra create <desc> --template <name>` | 创建任务 |
+| `lra show <id>` | 任务详情 |
+| `lra set <id> <status>` | 更新状态（受模板约束） |
+| `lra split <id> --plan '<json>'` | 拆分任务（模型提供方案） |
+
+### 🆕 质量保障命令
+
+| 命令 | 用途 |
+|------|------|
+| `lra status` | 项目进度可视化 |
+| `lra orientation` | Agent上下文重建 |
+| `lra regression-test [--report]` | 回归测试 |
+| `lra browser-test <id> [--script]` | 浏览器自动化测试 |
+| `lra quality-check [--report]` | 代码质量检查 |
+
