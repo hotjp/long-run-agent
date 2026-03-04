@@ -1,0 +1,1634 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LRA - AI Agent 任务管理 + 质量保障系统</title>
+    <meta name="description" content="让 Agent 长时间自动化开发不再崩溃。基于 Anthropic 论文，解决上下文丢失、过度设计、过早完成等核心痛点。">
+    
+    <!-- Open Graph -->
+    <meta property="og:title" content="LRA - AI Agent 任务管理系统">
+    <meta property="og:description" content="让 Agent 长时间自动化开发不再崩溃">
+    <meta property="og:type" content="website">
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0a0a1a;
+            --bg-secondary: #0f0f23;
+            --bg-tertiary: #1a1a2e;
+            --bg-card: #1e1e32;
+            
+            --accent-green: #00ff88;
+            --accent-cyan: #00d4ff;
+            --accent-purple: #667eea;
+            --accent-pink: #ed64a6;
+            
+            --text-primary: #ffffff;
+            --text-secondary: #cbd5e0;
+            --text-tertiary: #a0aec0;
+            
+            --success: #00ff88;
+            --warning: #fbd38d;
+            --error: #fc8181;
+            
+            --code-bg: #2d2d44;
+            --border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* Code Rain Background */
+        #code-rain-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            opacity: 0.1;
+            pointer-events: none;
+        }
+
+        /* Navigation */
+        nav {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background: rgba(10, 10, 26, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border-color);
+            z-index: 1000;
+            padding: 1rem 2rem;
+        }
+
+        .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(90deg, var(--accent-green), var(--accent-cyan));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+        }
+
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+
+        .nav-links a:hover {
+            color: var(--accent-green);
+        }
+
+        .nav-cta {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .btn {
+            padding: 0.5rem 1.5rem;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-primary {
+            background: linear-gradient(90deg, var(--accent-green), var(--accent-cyan));
+            color: var(--bg-primary);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0, 255, 136, 0.3);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            border: 1px solid var(--accent-green);
+            color: var(--accent-green);
+        }
+
+        .btn-secondary:hover {
+            background: var(--accent-green);
+            color: var(--bg-primary);
+        }
+
+        /* Sections */
+        section {
+            position: relative;
+            z-index: 1;
+            padding: 6rem 2rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        /* Hero Section */
+        #hero {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding-top: 6rem;
+        }
+
+        .hero-content h1 {
+            font-size: 3.5rem;
+            font-weight: 900;
+            margin-bottom: 1.5rem;
+            line-height: 1.2;
+        }
+
+        .gradient-text {
+            background: linear-gradient(90deg, var(--accent-green), var(--accent-cyan), var(--accent-purple));
+            background-size: 200% 200%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: gradient 3s ease infinite;
+        }
+
+        @keyframes gradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .hero-subtitle {
+            font-size: 1.25rem;
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .hero-paper {
+            font-size: 0.95rem;
+            color: var(--text-tertiary);
+            margin-bottom: 2.5rem;
+        }
+
+        .hero-paper a {
+            color: var(--accent-cyan);
+            text-decoration: none;
+        }
+
+        .hero-paper a:hover {
+            text-decoration: underline;
+        }
+
+        .hero-cta {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            margin-bottom: 3rem;
+        }
+
+        .btn-large {
+            padding: 1rem 2.5rem;
+            font-size: 1.1rem;
+        }
+
+        /* Terminal Window */
+        .terminal-window {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--accent-green);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0, 255, 136, 0.2);
+            max-width: 800px;
+            margin: 0 auto;
+            text-align: left;
+        }
+
+        .terminal-header {
+            background: var(--bg-card);
+            padding: 0.75rem 1rem;
+            display: flex;
+            gap: 0.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .terminal-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .terminal-dot.red { background: #ff5f56; }
+        .terminal-dot.yellow { background: #ffbd2e; }
+        .terminal-dot.green { background: #27c93f; }
+
+        .terminal-body {
+            padding: 1.5rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            min-height: 200px;
+        }
+
+        .terminal-line {
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: flex-start;
+        }
+
+        .terminal-prompt {
+            color: var(--accent-green);
+            margin-right: 0.5rem;
+        }
+
+        .terminal-command {
+            color: var(--text-primary);
+        }
+
+        .terminal-output {
+            color: var(--text-secondary);
+            margin-left: 1.5rem;
+        }
+
+        .terminal-success {
+            color: var(--success);
+            margin-left: 1.5rem;
+        }
+
+        /* Features Grid */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 2rem;
+            margin-top: 3rem;
+        }
+
+        .feature-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 2rem;
+            transition: all 0.3s;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--accent-green);
+            box-shadow: 0 10px 40px rgba(0, 255, 136, 0.2);
+        }
+
+        .feature-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .feature-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+
+        .feature-list {
+            list-style: none;
+        }
+
+        .feature-list li {
+            padding: 0.5rem 0;
+            color: var(--text-secondary);
+        }
+
+        .feature-list li:before {
+            content: "✓";
+            color: var(--accent-green);
+            margin-right: 0.5rem;
+            font-weight: bold;
+        }
+
+        /* Pain Points */
+        .pain-points-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-top: 3rem;
+        }
+
+        .pain-point-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 2rem;
+            transition: all 0.3s;
+        }
+
+        .pain-point-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .pain-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .pain-number {
+            background: linear-gradient(135deg, var(--error), var(--accent-pink));
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 1.25rem;
+        }
+
+        .pain-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+        }
+
+        .pain-problem {
+            color: var(--error);
+            margin-bottom: 1rem;
+            padding: 1rem;
+            background: rgba(252, 129, 129, 0.1);
+            border-left: 3px solid var(--error);
+            border-radius: 6px;
+        }
+
+        .pain-problem:before {
+            content: "❌ ";
+            font-weight: bold;
+        }
+
+        .pain-solution {
+            color: var(--success);
+            padding: 1rem;
+            background: rgba(0, 255, 136, 0.1);
+            border-left: 3px solid var(--success);
+            border-radius: 6px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+        }
+
+        .pain-solution:before {
+            content: "✅ ";
+            font-weight: bold;
+        }
+
+        /* Section Headers */
+        .section-header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        .section-title {
+            font-size: 2.5rem;
+            font-weight: 800;
+            margin-bottom: 1rem;
+        }
+
+        .section-subtitle {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        /* Performance Stats */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+            margin-top: 3rem;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 2rem;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 3rem;
+            font-weight: 900;
+            background: linear-gradient(90deg, var(--accent-green), var(--accent-cyan));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+        }
+
+        /* Case Studies */
+        .case-studies {
+            display: grid;
+            gap: 2rem;
+            margin-top: 3rem;
+        }
+
+        .case-study {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 2.5rem;
+            transition: all 0.3s;
+        }
+
+        .case-study:hover {
+            border-color: var(--accent-purple);
+            box-shadow: 0 10px 40px rgba(102, 126, 234, 0.2);
+        }
+
+        .case-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .case-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .case-tag {
+            background: var(--accent-purple);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .case-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1.5rem;
+            margin-top: 1.5rem;
+        }
+
+        .case-stat {
+            text-align: center;
+        }
+
+        .case-stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--accent-green);
+        }
+
+        .case-stat-label {
+            color: var(--text-tertiary);
+            font-size: 0.9rem;
+        }
+
+        /* Workflow */
+        .workflow {
+            background: var(--bg-tertiary);
+            border-radius: 12px;
+            padding: 3rem;
+            margin-top: 3rem;
+        }
+
+        .workflow-steps {
+            display: grid;
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+
+        .workflow-step {
+            display: flex;
+            gap: 1.5rem;
+            align-items: flex-start;
+        }
+
+        .step-number {
+            background: linear-gradient(135deg, var(--accent-green), var(--accent-cyan));
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 1.25rem;
+            flex-shrink: 0;
+        }
+
+        .step-content h3 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .step-content p {
+            color: var(--text-secondary);
+        }
+
+        .step-code {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 1rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--accent-green);
+            margin-top: 0.5rem;
+        }
+
+        /* CTA Section */
+        #cta {
+            text-align: center;
+            background: linear-gradient(180deg, var(--bg-primary), var(--bg-secondary));
+        }
+
+        .cta-title {
+            font-size: 3rem;
+            font-weight: 900;
+            margin-bottom: 2rem;
+        }
+
+        .cta-buttons {
+            display: flex;
+            gap: 1.5rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 2rem;
+        }
+
+        .social-proof {
+            display: flex;
+            gap: 3rem;
+            justify-content: center;
+            margin-top: 3rem;
+            flex-wrap: wrap;
+        }
+
+        .proof-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-secondary);
+        }
+
+        .proof-item i {
+            color: var(--success);
+        }
+
+        /* Stratix Section */
+        .stratix-banner {
+            background: linear-gradient(135deg, var(--bg-card), var(--bg-tertiary));
+            border: 2px solid var(--accent-purple);
+            border-radius: 12px;
+            padding: 3rem;
+            margin-top: 4rem;
+            text-align: center;
+        }
+
+        .stratix-title {
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+
+        .stratix-desc {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            margin-bottom: 1.5rem;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .stratix-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--accent-purple);
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1.1rem;
+            transition: color 0.3s;
+        }
+
+        .stratix-link:hover {
+            color: var(--accent-cyan);
+        }
+
+        /* Footer */
+        footer {
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border-color);
+            padding: 3rem 2rem;
+            text-align: center;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 2rem;
+            justify-content: center;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .footer-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+
+        .footer-links a:hover {
+            color: var(--accent-green);
+        }
+
+        .footer-copy {
+            color: var(--text-tertiary);
+            font-size: 0.9rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .nav-links {
+                display: none;
+            }
+
+            .hero-content h1 {
+                font-size: 2.5rem;
+            }
+
+            .section-title {
+                font-size: 2rem;
+            }
+
+            .hero-cta {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .btn-large {
+                width: 100%;
+                max-width: 300px;
+            }
+
+            .cta-buttons {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .features-grid,
+            .pain-points-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Animations */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .fade-in-up {
+            animation: fadeInUp 0.8s ease-out;
+        }
+
+        /* Smooth Scroll */
+        html {
+            scroll-behavior: smooth;
+        }
+
+        /* Code Block */
+        .code-block {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 1.5rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            overflow-x: auto;
+            position: relative;
+        }
+
+        .copy-btn {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            background: var(--accent-green);
+            color: var(--bg-primary);
+            border: none;
+            border-radius: 4px;
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+            font-size: 0.75rem;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .copy-btn:hover {
+            background: var(--accent-cyan);
+        }
+
+        /* Highlights */
+        .highlight {
+            color: var(--accent-green);
+            font-weight: 600;
+        }
+
+        .highlight-cyan {
+            color: var(--accent-cyan);
+            font-weight: 600;
+        }
+
+        /* Badge */
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }
+
+        .badge-new {
+            background: var(--accent-green);
+            color: var(--bg-primary);
+        }
+
+        .badge-v4 {
+            background: var(--accent-purple);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <!-- Code Rain Canvas -->
+    <canvas id="code-rain-canvas"></canvas>
+
+    <!-- Navigation -->
+    <nav>
+        <div class="nav-container">
+            <div class="logo">LRA v4.0</div>
+            <ul class="nav-links">
+                <li><a href="#pain-points">痛点</a></li>
+                <li><a href="#features">功能</a></li>
+                <li><a href="#quick-start">快速开始</a></li>
+                <li><a href="#cases">案例</a></li>
+                <li><a href="#performance">性能</a></li>
+            </ul>
+            <div class="nav-cta">
+                <a href="https://github.com/hotjp/long-run-agent" class="btn btn-secondary" target="_blank">
+                    <i class="fab fa-github"></i> GitHub
+                </a>
+                <a href="#quick-start" class="btn btn-primary">快速开始</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section id="hero">
+        <div class="container">
+            <div class="hero-content fade-in-up">
+                <span class="badge badge-new">NEW</span>
+                <span class="badge badge-v4">v4.0</span>
+                <h1>
+                    让 Agent 长时间自动化开发<br>
+                    <span class="gradient-text">不再崩溃</span>
+                </h1>
+                <p class="hero-subtitle">
+                    解决 Agent 上下文丢失、过度设计、过早完成等核心痛点
+                </p>
+                <p class="hero-paper">
+                    基于 Anthropic 论文 <a href="https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents" target="_blank">
+                    "Effective Harnesses for Long-Running Agents"</a>
+                </p>
+                
+                <div class="hero-cta">
+                    <a href="#quick-start" class="btn btn-primary btn-large">
+                        <i class="fas fa-rocket"></i> 快速开始（3分钟）
+                    </a>
+                    <a href="https://github.com/hotjp/long-run-agent" class="btn btn-secondary btn-large" target="_blank">
+                        <i class="fab fa-github"></i> 查看 GitHub
+                    </a>
+                </div>
+
+                <!-- Terminal Window -->
+                <div class="terminal-window">
+                    <div class="terminal-header">
+                        <div class="terminal-dot red"></div>
+                        <div class="terminal-dot yellow"></div>
+                        <div class="terminal-dot green"></div>
+                    </div>
+                    <div class="terminal-body">
+                        <div class="terminal-line">
+                            <span class="terminal-prompt">$</span>
+                            <span class="terminal-command">pip install long-run-agent</span>
+                        </div>
+                        <div class="terminal-line">
+                            <span class="terminal-success">✅ Successfully installed long-run-agent-4.0.1</span>
+                        </div>
+                        <div class="terminal-line">
+                            <span class="terminal-prompt">$</span>
+                            <span class="terminal-command">cd /your/project && lra init --name "My Project"</span>
+                        </div>
+                        <div class="terminal-line">
+                            <span class="terminal-success">✅ 项目已初始化：My Project</span>
+                        </div>
+                        <div class="terminal-line">
+                            <span class="terminal-prompt">$</span>
+                            <span class="terminal-command">lra create "用户登录功能" --priority P0</span>
+                        </div>
+                        <div class="terminal-line">
+                            <span class="terminal-success">✅ 任务已创建: task_001</span>
+                        </div>
+                        <div class="terminal-line">
+                            <span class="terminal-prompt">$</span>
+                            <span class="terminal-command">lra context --output-limit 8k</span>
+                        </div>
+                        <div class="terminal-line">
+                            <span class="terminal-output">📊 项目状态: 待执行 1 | 推荐: task_001 (P0)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stratix Banner -->
+                <div class="stratix-banner" style="margin-top: 3rem;">
+                    <p class="stratix-desc">
+                        💡 <strong>提示：</strong>如果你想用可视化界面来管理 Agent 军团，可以查看
+                    </p>
+                    <a href="https://github.com/stratix-rts/stratix" class="stratix-link" target="_blank">
+                        <i class="fab fa-github"></i> Stratix 项目 - LRA 的可视化界面
+                        <i class="fas fa-arrow-right"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pain Points Section -->
+    <section id="pain-points">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">你的 Agent 正在面临这些问题吗？</h2>
+                <p class="section-subtitle">LRA 解决了 Agent 长时间自动化开发中的 6 个核心痛点</p>
+            </div>
+
+            <div class="pain-points-grid">
+                <!-- Pain Point 1 -->
+                <div class="pain-point-card">
+                    <div class="pain-header">
+                        <div class="pain-number">1</div>
+                        <h3 class="pain-title">上下文丢失</h3>
+                    </div>
+                    <div class="pain-problem">
+                        每次新会话开始，Agent 完全不记得之前做了什么，需要花费大量时间重新理解项目状态
+                    </div>
+                    <div class="pain-solution">
+                        lra orientation  # 3秒重建完整上下文<br>
+                        → 自动恢复工作目录、项目结构、任务进度、代码索引
+                    </div>
+                </div>
+
+                <!-- Pain Point 2 -->
+                <div class="pain-point-card">
+                    <div class="pain-header">
+                        <div class="pain-number">2</div>
+                        <h3 class="pain-title">过度设计</h3>
+                    </div>
+                    <div class="pain-problem">
+                        Agent 倾向于一次性完成整个项目，结果中途耗尽上下文，留下半成品代码
+                    </div>
+                    <div class="pain-solution">
+                        智能拆分：根据输出限制自动推荐任务拆分<br>
+                        增量开发：一次只做一个任务，确保质量
+                    </div>
+                </div>
+
+                <!-- Pain Point 3 -->
+                <div class="pain-point-card">
+                    <div class="pain-header">
+                        <div class="pain-number">3</div>
+                        <h3 class="pain-title">过早宣布完成</h3>
+                    </div>
+                    <div class="pain-problem">
+                        Agent 在项目后期容易误认为"差不多了"，实际上还有大量功能未完成
+                    </div>
+                    <div class="pain-solution">
+                        特性清单：200+ 验证点，清晰定义"完成"<br>
+                        进度可视化：实时查看完成度
+                    </div>
+                </div>
+
+                <!-- Pain Point 4 -->
+                <div class="pain-point-card">
+                    <div class="pain-header">
+                        <div class="pain-number">4</div>
+                        <h3 class="pain-title">质量保障缺失</h3>
+                    </div>
+                    <div class="pain-problem">
+                        Agent 标记功能完成但没有充分测试，留下隐藏 bug 和技术债务
+                    </div>
+                    <div class="pain-solution">
+                        验证机制：完成前必须提供测试证据<br>
+                        回归测试：自动运行测试套件<br>
+                        浏览器测试：端到端验证
+                    </div>
+                </div>
+
+                <!-- Pain Point 5 -->
+                <div class="pain-point-card">
+                    <div class="pain-header">
+                        <div class="pain-number">5</div>
+                        <h3 class="pain-title">多 Agent 协作困难</h3>
+                    </div>
+                    <div class="pain-problem">
+                        多个 Agent 同时工作，资源冲突，任务状态混乱，重复工作
+                    </div>
+                    <div class="pain-solution">
+                        层级锁机制：支持大模型拆分、小模型并行<br>
+                        心跳保活：自动检测和恢复<br>
+                        协作流程：清晰的分工和验收机制
+                    </div>
+                </div>
+
+                <!-- Pain Point 6 -->
+                <div class="pain-point-card">
+                    <div class="pain-header">
+                        <div class="pain-number">6</div>
+                        <h3 class="pain-title">输出限制瓶颈</h3>
+                    </div>
+                    <div class="pain-problem">
+                        大型任务受限于模型的 4K/8K/16K token 限制，无法一次性输出完整代码
+                    </div>
+                    <div class="pain-solution">
+                        输出限制感知：根据模型能力推荐任务粒度<br>
+                        自动拆分：将大任务拆分为适合的小任务
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Theory Section -->
+    <section id="theory" style="background: var(--bg-secondary);">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">基于 Anthropic 的前沿研究</h2>
+                <p class="section-subtitle">站在巨人的肩膀上，解决 Agent 长时间运行的核心难题</p>
+            </div>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem;">
+                <!-- Paper Card -->
+                <div class="feature-card">
+                    <div class="feature-icon">📄</div>
+                    <h3 class="feature-title">核心论文</h3>
+                    <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+                        Anthropic: <strong>"Effective Harnesses for Long-Running Agents"</strong>
+                    </p>
+                    <div style="background: var(--bg-tertiary); padding: 1rem; border-radius: 6px; font-size: 0.9rem; color: var(--text-tertiary);">
+                        "The core challenge of long-running agents is that they must work in discrete sessions, 
+                        and each new session begins with no memory of what came before."
+                    </div>
+                </div>
+
+                <!-- Solution Card -->
+                <div class="feature-card">
+                    <div class="feature-icon">🧠</div>
+                    <h3 class="feature-title">论文解决方案</h3>
+                    <ul class="feature-list">
+                        <li>Initializer Agent + Coding Agent</li>
+                        <li>增量开发（Incremental Progress）</li>
+                        <li>环境管理（Feature List）</li>
+                        <li>质量保障（Testing & Verification）</li>
+                    </ul>
+                </div>
+
+                <!-- LRA Implementation -->
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3 class="feature-title">LRA 实现</h3>
+                    <ul class="feature-list">
+                        <li><strong>v3.3:</strong> 上下文重建协议（orientation）</li>
+                        <li><strong>v3.4:</strong> 系统预检 + 项目分析</li>
+                        <li><strong>v4.0:</strong> 完整质量保障系统</li>
+                        <li><strong>超越:</strong> 多 Agent 协作 + 模板系统</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">一个完整的 Agent 开发工具链</h2>
+                <p class="section-subtitle">6 大核心模块，覆盖 Agent 开发的所有场景</p>
+            </div>
+
+            <div class="features-grid">
+                <!-- Task Management -->
+                <div class="feature-card">
+                    <div class="feature-icon">📋</div>
+                    <h3 class="feature-title">任务管理</h3>
+                    <ul class="feature-list">
+                        <li>多状态流转（pending → completed）</li>
+                        <li>DAG 依赖关系</li>
+                        <li>优先级调度（P0-P3）</li>
+                        <li>模板系统（通用/代码/小说/数据）</li>
+                    </ul>
+                </div>
+
+                <!-- Lock Mechanism -->
+                <div class="feature-card">
+                    <div class="feature-icon">🔐</div>
+                    <h3 class="feature-title">锁机制</h3>
+                    <ul class="feature-list">
+                        <li>层级锁（claim/publish/heartbeat）</li>
+                        <li>批量锁（batch-lock）</li>
+                        <li>心跳保活（自动续期）</li>
+                        <li>过期恢复（orphan cleanup）</li>
+                    </ul>
+                </div>
+
+                <!-- Context Management -->
+                <div class="feature-card">
+                    <div class="feature-icon">🧠</div>
+                    <h3 class="feature-title">上下文管理</h3>
+                    <ul class="feature-list">
+                        <li>上下文重建（orientation）</li>
+                        <li>项目分析（analyze-project）</li>
+                        <li>Agent 索引（快速定位代码）</li>
+                        <li>进度可视化（status）</li>
+                    </ul>
+                </div>
+
+                <!-- Quality Assurance -->
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3 class="feature-title">质量保障</h3>
+                    <ul class="feature-list">
+                        <li>验证机制（完成前必填）</li>
+                        <li>回归测试（regression-test）</li>
+                        <li>浏览器测试（browser-test）</li>
+                        <li>代码质量检查（quality-check）</li>
+                    </ul>
+                </div>
+
+                <!-- Multi-Agent Collaboration -->
+                <div class="feature-card">
+                    <div class="feature-icon">🤖</div>
+                    <h3 class="feature-title">多 Agent 协作</h3>
+                    <ul class="feature-list">
+                        <li>大模型拆分 + 小模型并行</li>
+                        <li>任务依赖管理</li>
+                        <li>协作流程标准化</li>
+                        <li>验收/集成机制</li>
+                    </ul>
+                </div>
+
+                <!-- Performance -->
+                <div class="feature-card">
+                    <div class="feature-icon">📊</div>
+                    <h3 class="feature-title">性能优化</h3>
+                    <ul class="feature-list">
+                        <li>1000 任务实测</li>
+                        <li>&lt; 20ms 响应时间</li>
+                        <li>19.5% 内存增长</li>
+                        <li>优秀性能评级</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Quick Start Section -->
+    <section id="quick-start" style="background: var(--bg-secondary);">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">3 分钟快速开始</h2>
+                <p class="section-subtitle">简单 5 步，让你的 Agent 开发效率提升 5x</p>
+            </div>
+
+            <div class="workflow">
+                <div class="workflow-steps">
+                    <!-- Step 1 -->
+                    <div class="workflow-step">
+                        <div class="step-number">1</div>
+                        <div class="step-content">
+                            <h3>安装 LRA</h3>
+                            <p>通过 pip 一键安装</p>
+                            <div class="code-block">
+                                <button class="copy-btn" onclick="copyCode(this)">复制</button>
+                                <code>pip install long-run-agent</code>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 2 -->
+                    <div class="workflow-step">
+                        <div class="step-number">2</div>
+                        <div class="step-content">
+                            <h3>初始化项目</h3>
+                            <p>在你的项目目录中初始化 LRA</p>
+                            <div class="code-block">
+                                <button class="copy-btn" onclick="copyCode(this)">复制</button>
+                                <code>cd /your/project<br>lra init --name "My Project"</code>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 3 -->
+                    <div class="workflow-step">
+                        <div class="step-number">3</div>
+                        <div class="step-content">
+                            <h3>创建任务</h3>
+                            <p>创建你的第一个任务</p>
+                            <div class="code-block">
+                                <button class="copy-btn" onclick="copyCode(this)">复制</button>
+                                <code>lra create "用户登录功能" --priority P0</code>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 4 -->
+                    <div class="workflow-step">
+                        <div class="step-number">4</div>
+                        <div class="step-content">
+                            <h3>获取上下文</h3>
+                            <p>查看项目状态和推荐任务</p>
+                            <div class="code-block">
+                                <button class="copy-btn" onclick="copyCode(this)">复制</button>
+                                <code>lra context --output-limit 8k</code>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 5 -->
+                    <div class="workflow-step">
+                        <div class="step-number">5</div>
+                        <div class="step-content">
+                            <h3>认领任务</h3>
+                            <p>开始工作</p>
+                            <div class="code-block">
+                                <button class="copy-btn" onclick="copyCode(this)">复制</button>
+                                <code>lra claim task_001</code>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Case Studies Section -->
+    <section id="cases">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">真实项目案例</h2>
+                <p class="section-subtitle">看看 LRA 在实际项目中的表现</p>
+            </div>
+
+            <div class="case-studies">
+                <!-- Case 1 -->
+                <div class="case-study">
+                    <div class="case-header">
+                        <h3 class="case-title">LRA 自身开发</h3>
+                        <span class="case-tag">实际案例</span>
+                    </div>
+                    <p style="color: var(--text-secondary);">
+                        LRA v4.0 使用 LRA 自身进行开发管理，实现了完整的自举
+                    </p>
+                    <div class="case-stats">
+                        <div class="case-stat">
+                            <div class="case-stat-value">22</div>
+                            <div class="case-stat-label">代码文件</div>
+                        </div>
+                        <div class="case-stat">
+                            <div class="case-stat-value">8,795</div>
+                            <div class="case-stat-label">代码行数</div>
+                        </div>
+                        <div class="case-stat">
+                            <div class="case-stat-value">31</div>
+                            <div class="case-stat-label">命令</div>
+                        </div>
+                        <div class="case-stat">
+                            <div class="case-stat-value">12</div>
+                            <div class="case-stat-label">单元测试</div>
+                        </div>
+                        <div class="case-stat">
+                            <div class="case-stat-value">&lt;5%</div>
+                            <div class="case-stat-label">Bug 率</div>
+                        </div>
+                        <div class="case-stat">
+                            <div class="case-stat-value">100%</div>
+                            <div class="case-stat-label">测试覆盖</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Case 2 -->
+                <div class="case-study">
+                    <div class="case-header">
+                        <h3 class="case-title">全栈 Web 应用</h3>
+                        <span class="case-tag">论文案例</span>
+                    </div>
+                    <p style="color: var(--text-secondary);">
+                        参考 Anthropic 论文，使用 LRA 管理 Claude.ai Clone 的开发
+                    </p>
+                    <div class="case-stats">
+                        <div class="case-stat">
+                            <div class="case-stat-value">200+</div>
+                            <div class="case-stat-label">功能特性</div>
+                        </div>
+                        <div class="case-stat">
+                            <div class="case-stat-value">100%</div>
+                            <div class="case-stat-label">完整功能</div>
+                        </div>
+                        <div class="case-stat">
+                            <div class="case-stat-value">A</div>
+                            <div class="case-stat-label">代码质量</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Case 3 -->
+                <div class="case-study">
+                    <div class="case-header">
+                        <h3 class="case-title">多 Agent 协作</h3>
+                        <span class="case-tag">企业案例</span>
+                    </div>
+                    <p style="color: var(--text-secondary);">
+                        1 个 GPT-4（架构师）+ 5 个 Claude 3.5（开发者）协作开发大型模块化项目
+                    </p>
+                    <div class="case-stats">
+                        <div class="case-stat">
+                            <div class="case-stat-value">5x</div>
+                            <div class="case-stat-label">效率提升</div>
+                        </div>
+                        <div class="case-stat">
+                            <div class="case-stat-value">0</div>
+                            <div class="case-stat-label">协作成本</div>
+                        </div>
+                        <div class="case-stat">
+                            <div class="case-stat-value">100%</div>
+                            <div class="case-stat-label">代码一致性</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Performance Section -->
+    <section id="performance" style="background: var(--bg-secondary);">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">性能基准测试</h2>
+                <p class="section-subtitle">1000 任务实测，优秀性能评级</p>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value">19.5%</div>
+                    <div class="stat-label">内存增长<br><span style="font-size: 0.85rem; color: var(--text-tertiary);">10 → 1000 任务</span></div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-value">&lt;10ms</div>
+                    <div class="stat-label">创建延迟<br><span style="font-size: 0.85rem; color: var(--text-tertiary);">平均响应时间</span></div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-value">&lt;2ms</div>
+                    <div class="stat-label">读取延迟<br><span style="font-size: 0.85rem; color: var(--text-tertiary);">平均响应时间</span></div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-value">&lt;20ms</div>
+                    <div class="stat-label">更新延迟<br><span style="font-size: 0.85rem; color: var(--text-tertiary);">平均响应时间</span></div>
+                </div>
+            </div>
+
+            <div style="text-align: center; margin-top: 3rem;">
+                <div style="background: var(--bg-card); border: 2px solid var(--accent-green); border-radius: 12px; padding: 2rem; display: inline-block;">
+                    <div style="font-size: 3rem; font-weight: 900; color: var(--success); margin-bottom: 0.5rem;">🟢 优秀</div>
+                    <div style="color: var(--text-secondary); font-size: 1.1rem;">性能评级：适合 1000+ 任务</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Multi-Agent Workflow Section -->
+    <section id="workflow">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">多 Agent 协作工作流</h2>
+                <p class="section-subtitle">大模型拆分 + 小模型并行，效率提升 5x</p>
+            </div>
+
+            <div class="workflow">
+                <div class="workflow-steps">
+                    <div class="workflow-step">
+                        <div class="step-number">🤖</div>
+                        <div class="step-content">
+                            <h3>大模型 - 架构师</h3>
+                            <p style="color: var(--text-secondary); margin-bottom: 0.5rem;">负责整体架构设计和任务拆分</p>
+                            <div class="step-code">
+                                lra claim task_001  # 认领整个模块<br>
+                                lra split task_001 --plan '[...]'  # 拆分为子任务<br>
+                                lra publish task_001  # 释放子任务锁
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="workflow-step">
+                        <div class="step-number">👨‍💻</div>
+                        <div class="step-content">
+                            <h3>小模型 - 开发者（x5）</h3>
+                            <p style="color: var(--text-secondary); margin-bottom: 0.5rem;">并行开发子任务</p>
+                            <div class="step-code">
+                                lra context --output-limit 8k  # 获取可领取任务<br>
+                                lra claim task_001_01  # 领取子任务<br>
+                                # 按契约开发...<br>
+                                lra set task_001_01 completed  # 完成并验证
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="workflow-step">
+                        <div class="step-number">✅</div>
+                        <div class="step-content">
+                            <h3>大模型 - 验收</h3>
+                            <p style="color: var(--text-secondary); margin-bottom: 0.5rem;">集成测试和代码合并</p>
+                            <div class="step-code">
+                                lra regression-test  # 回归测试<br>
+                                lra quality-check  # 质量检查<br>
+                                # 合并代码...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section id="cta">
+        <div class="container">
+            <h2 class="cta-title gradient-text">让你的 Agent 开发效率提升 5x</h2>
+            <p class="section-subtitle" style="margin-bottom: 2rem;">
+                3 分钟快速开始，立即体验 LRA 的强大功能
+            </p>
+
+            <div class="cta-buttons">
+                <a href="#quick-start" class="btn btn-primary btn-large">
+                    <i class="fas fa-rocket"></i> 快速开始（3 分钟）
+                </a>
+                <a href="https://github.com/hotjp/long-run-agent" class="btn btn-secondary btn-large" target="_blank">
+                    <i class="fab fa-github"></i> 查看 GitHub
+                </a>
+                <a href="https://pypi.org/project/long-run-agent/" class="btn btn-secondary btn-large" target="_blank">
+                    <i class="fas fa-download"></i> PyPI
+                </a>
+            </div>
+
+            <div class="social-proof">
+                <div class="proof-item">
+                    <i class="fas fa-check-circle"></i>
+                    <span>PyPI 发布</span>
+                </div>
+                <div class="proof-item">
+                    <i class="fas fa-check-circle"></i>
+                    <span>MIT 开源协议</span>
+                </div>
+                <div class="proof-item">
+                    <i class="fas fa-check-circle"></i>
+                    <span>1000+ 任务验证</span>
+                </div>
+                <div class="proof-item">
+                    <i class="fas fa-check-circle"></i>
+                    <span>完整文档</span>
+                </div>
+            </div>
+
+            <!-- Stratix Banner -->
+            <div class="stratix-banner">
+                <h3 class="stratix-title">
+                    <i class="fas fa-desktop"></i> 想要可视化界面？
+                </h3>
+                <p class="stratix-desc">
+                    如果你想用可视化界面来使用 LRA 管理 Agent 军团，可以查看 <strong>Stratix</strong> 项目。
+                    Stratix 提供了完整的图形界面，让你更直观地管理任务、监控进度、协调多个 Agent。
+                </p>
+                <a href="https://github.com/stratix-rts/stratix" class="btn btn-primary btn-large" target="_blank">
+                    <i class="fab fa-github"></i> 访问 Stratix 项目
+                    <i class="fas fa-arrow-right"></i>
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <div class="footer-links">
+                <a href="https://github.com/hotjp/long-run-agent" target="_blank">
+                    <i class="fab fa-github"></i> GitHub
+                </a>
+                <a href="https://pypi.org/project/long-run-agent/" target="_blank">
+                    <i class="fas fa-download"></i> PyPI
+                </a>
+                <a href="https://github.com/hotjp/long-run-agent/blob/main/README.md" target="_blank">
+                    <i class="fas fa-book"></i> 文档
+                </a>
+                <a href="https://github.com/hotjp/long-run-agent/issues" target="_blank">
+                    <i class="fas fa-bug"></i> 问题反馈
+                </a>
+                <a href="https://github.com/stratix-rts/stratix" target="_blank">
+                    <i class="fas fa-desktop"></i> Stratix
+                </a>
+            </div>
+            <div class="footer-copy">
+                &copy; 2026 LRA - AI Agent Task Manager. MIT License.
+                <br>
+                Based on <a href="https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents" target="_blank" style="color: var(--accent-cyan);">Anthropic's Research</a>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Code Rain Effect
+        const canvas = document.getElementById('code-rain-canvas');
+        const ctx = canvas.getContext('2d');
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const chars = ['L', 'R', 'A', '0', '1', '{', '}', '<', '>', '/', '=', ';', '(', ')', '[', ']'];
+        const fontSize = 14;
+        const columns = canvas.width / fontSize;
+        const drops = [];
+
+        for (let i = 0; i < columns; i++) {
+            drops[i] = 1;
+        }
+
+        function drawCodeRain() {
+            ctx.fillStyle = 'rgba(10, 10, 26, 0.05)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = '#00ff88';
+            ctx.font = fontSize + 'px JetBrains Mono';
+
+            for (let i = 0; i < drops.length; i++) {
+                const text = chars[Math.floor(Math.random() * chars.length)];
+                ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+
+                if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
+                    drops[i] = 0;
+                }
+                drops[i]++;
+            }
+        }
+
+        setInterval(drawCodeRain, 50);
+
+        // Resize canvas
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+
+        // Copy code function
+        function copyCode(button) {
+            const codeBlock = button.parentElement;
+            const code = codeBlock.querySelector('code').textContent;
+            
+            navigator.clipboard.writeText(code).then(() => {
+                const originalText = button.textContent;
+                button.textContent = '已复制!';
+                button.style.background = 'var(--accent-cyan)';
+                
+                setTimeout(() => {
+                    button.textContent = originalText;
+                    button.style.background = 'var(--accent-green)';
+                }, 2000);
+            });
+        }
+
+        // Smooth scroll for navigation
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // Intersection Observer for fade-in animations
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -100px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'translateY(0)';
+                }
+            });
+        }, observerOptions);
+
+        // Apply fade-in animation to sections
+        document.querySelectorAll('section').forEach(section => {
+            section.style.opacity = '0';
+            section.style.transform = 'translateY(30px)';
+            section.style.transition = 'opacity 0.8s ease, transform 0.8s ease';
+            observer.observe(section);
+        });
+
+        // Hero section should be visible immediately
+        document.getElementById('hero').style.opacity = '1';
+        document.getElementById('hero').style.transform = 'translateY(0)';
+
+        // Typing effect for terminal
+        const terminalCommands = document.querySelectorAll('.terminal-command');
+        terminalCommands.forEach((cmd, index) => {
+            const text = cmd.textContent;
+            cmd.textContent = '';
+            cmd.style.opacity = '0';
+            
+            setTimeout(() => {
+                cmd.style.opacity = '1';
+                let i = 0;
+                const typeInterval = setInterval(() => {
+                    if (i < text.length) {
+                        cmd.textContent += text.charAt(i);
+                        i++;
+                    } else {
+                        clearInterval(typeInterval);
+                    }
+                }, 50);
+            }, index * 1500);
+        });
+    </script>
+</body>
+</html>

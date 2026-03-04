@@ -38,7 +38,7 @@ class RecordsManager:
         feature_id: str,
         commit: str = "",
         branch: str = "",
-        files: List[Dict] = None,
+        files: Optional[List[Dict]] = None,
         desc: str = "",
     ) -> bool:
         record_data = self._load(feature_id)

@@ -199,8 +199,8 @@ class LRACLI:
 
     def cmd_list(
         self,
-        status: str = None,
-        template: str = None,
+        status: Optional[str] = None,
+        template: Optional[str] = None,
         compact: bool = False,
         json_mode: bool = False,
     ):
@@ -572,7 +572,11 @@ class LRACLI:
                 result = self.records_manager.auto_record(args.feature_id, args.desc)
             else:
                 self.records_manager.add(
-                    args.feature_id, commit=args.commit, branch=args.branch, desc=args.desc
+                    args.feature_id,
+                    commit=args.commit or "",
+                    branch=args.branch or "",
+                    files=[],
+                    desc=args.desc or "",
                 )
                 result = {"feature_id": args.feature_id, "recorded": True}
             output(result, json_mode)
