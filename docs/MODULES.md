@@ -1,8 +1,8 @@
 # long-run-agent 项目文档
 
-> 分析时间：2026-03-03 13:15
+> 分析时间：2026-03-03 15:34
 > 主语言：python
-> 文件数：22 | 代码行数：8590
+> 文件数：22 | 代码行数：8795
 
 ## 项目概述
 
@@ -20,7 +20,7 @@
 
 | 模块 | 文件数 | 代码行数 | 文档覆盖 | 说明 |
 |------|--------|----------|----------|------|
-| [lra](./modules/lra.md) | 17 | 7548 | 100% | - |
+| [lra](./modules/lra.md) | 17 | 7753 | 100% | - |
 
 ## 文件列表
 
@@ -37,14 +37,14 @@
 | [lra/project_analyzer.py](./files/lra_project_analyzer_py.md) | python | 1294 | 8 | 0 |
 | [lra/__init__.py](./files/lra___init___py.md) | python | 26 | 0 | 0 |
 | [lra/template_manager.py](./files/lra_template_manager_py.md) | python | 550 | 1 | 1 |
-| [lra/regression_test.py](./files/lra_regression_test_py.md) | python | 289 | 1 | 0 |
+| [lra/regression_test.py](./files/lra_regression_test_py.md) | python | 287 | 1 | 0 |
 | [lra/tips.py](./files/lra_tips_py.md) | python | 62 | 0 | 0 |
-| [lra/cli.py](./files/lra_cli_py.md) | python | 1806 | 1 | 2 |
+| [lra/cli.py](./files/lra_cli_py.md) | python | 1941 | 1 | 2 |
 | [lra/quality_checker.py](./files/lra_quality_checker_py.md) | python | 395 | 1 | 0 |
-| [lra/task_manager.py](./files/lra_task_manager_py.md) | python | 904 | 1 | 1 |
+| [lra/task_manager.py](./files/lra_task_manager_py.md) | python | 980 | 1 | 1 |
 | [lra/browser_automation.py](./files/lra_browser_automation_py.md) | python | 258 | 1 | 0 |
 | [lra/__main__.py](./files/lra___main___py.md) | python | 11 | 0 | 0 |
-| [lra/cli_extensions.py](./files/lra_cli_extensions_py.md) | python | 427 | 1 | 0 |
+| [lra/cli_extensions.py](./files/lra_cli_extensions_py.md) | python | 423 | 1 | 0 |
 | [bin/lra.js](./files/bin_lra_js.md) | javascript | 66 | 0 | 1 |
 | [scripts/benchmark.py](./files/scripts_benchmark_py.md) | python | 605 | 2 | 11 |
 | [scripts/check-python.js](./files/scripts_check-python_js.md) | javascript | 39 | 0 | 0 |

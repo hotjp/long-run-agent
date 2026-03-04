@@ -1,7 +1,7 @@
 # lra 模块
 
-> 分析时间：2026-03-03 13:15
-> 文件数：17 | 代码行数：7548 | 文档覆盖：100%
+> 分析时间：2026-03-03 15:34
+> 文件数：17 | 代码行数：7753 | 文档覆盖：100%
 
 ## 概述
 
@@ -171,21 +171,21 @@ Args:
 
 ### 本模块依赖
 
-- time
-- uuid
-- lra.template_manager
-- argparse
-- fcntl
-- lra.locks_manager
-- lra.batch_lock_manager
-- os
-- ast
-- lra.config
-- json
-- lra.tips
-- random
 - subprocess
+- lra.tips
+- lra.batch_lock_manager
+- lra.task_manager
+- re
+- time
+- random
+- argparse
 - lra.cli
+- yaml
+- lra.cli_extensions
+- fcntl
+- os
+- dataclasses
+- lra.locks_manager
 
 ## 使用示例
 

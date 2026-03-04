@@ -1,6 +1,6 @@
 # lra/task_manager.py
 
-> 语言：python | 代码行数：904
+> 语言：python | 代码行数：980
 
 ## 概述
 
@@ -21,7 +21,9 @@ v3.4 - 项目级模板固定
 
 ## 依赖
 
+- json
 - os
+- subprocess
 - datetime
 - typing
 - lra.config

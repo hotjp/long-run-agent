@@ -1,6 +1,6 @@
 # lra/cli_extensions.py
 
-> 语言：python | 代码行数：427
+> 语言：python | 代码行数：423
 
 ## 概述
 
@@ -16,6 +16,7 @@ v4.0 - 新增验证、测试、质量检查功能
 ## 依赖
 
 - os
+- pathlib
 - datetime
 - typing
 - lra.config
