@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lra"
-version = "4.0.0"
+version = "4.0.1"
 description = "A powerful framework for managing long-running AI Agent tasks with quality assurance"
 readme = "README.md"
 license = {text = "MIT"}

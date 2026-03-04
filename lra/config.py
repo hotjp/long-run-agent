@@ -12,7 +12,7 @@ import time
 from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime
 
-CURRENT_VERSION = "4.0.0"
+CURRENT_VERSION = "4.0.1"
 SCHEMA_VERSION = "2026-02-25"
 
 
