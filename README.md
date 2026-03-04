@@ -17,16 +17,16 @@
 
 ```bash
 # 安装（自动包含 Jinja2）
-pip install lra
+pip install long-run-agent
 
 # 开发环境
-pip install lra[dev]
+pip install long-run-agent[dev]
 
 # 完整安装（包含浏览器测试支持）
-pip install lra[full]
+pip install long-run-agent[full]
 ```
 
-**注意**：v4.0+ 包名已从 `long-run-agent` 改为 `lra`。
+**注意**：安装包名为 `long-run-agent`，命令行工具为 `lra`。
 
 ## 快速开始
 
