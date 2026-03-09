@@ -13,10 +13,10 @@ from lra.locks_manager import LocksManager, LockStatus
 
 __all__ = [
     "__version__",
-    "CURRENT_VERSION",
     "Config",
     "SafeJson",
     "GitHelper",
+    "CURRENT_VERSION",
     "TaskManager",
     "TemplateManager",
     "RecordsManager",

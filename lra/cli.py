@@ -20,6 +20,7 @@ from lra.locks_manager import LocksManager
 from lra.batch_lock_manager import BatchLockManager
 from lra.tips import TIPS_CONFIG
 from lra.cli_extensions import CLIExtensions
+from lra.quality_checker import QualityChecker
 
 try:
     from lra.system_check import SystemCheckTask, ConfigManager
@@ -175,7 +176,6 @@ class LRACLI:
         context = self.task_manager.get_context(output_limit)
         locks = self.locks_manager.get_all_locks()
 
-        # 添加锁状态信息到 can_take 任务
         for task in context.get("can_take", []):
             lock = locks.get(task["id"])
             if lock:
@@ -183,7 +183,6 @@ class LRACLI:
             else:
                 task["lock_status"] = "free"
 
-        # 添加锁状态信息到 in_progress 任务
         for task in context.get("in_progress", []):
             lock = locks.get(task["id"])
             if lock:
@@ -195,7 +194,82 @@ class LRACLI:
         resumable = self.locks_manager.get_resumable()
         if resumable:
             context["resumable"] = resumable
+
+        if not json_mode:
+            self._display_optimizing_tasks()
+
         output(context, json_mode)
+
+    def _display_optimizing_tasks(self):
+        """显示优化中的任务"""
+        all_tasks = self.task_manager.list_all()
+        optimizing_tasks = []
+
+        for task in all_tasks:
+            ralph = task.get("ralph", {})
+            iteration = ralph.get("iteration", 0)
+            max_iterations = ralph.get("max_iterations", 7)
+            quality_checks = ralph.get("quality_checks", {})
+            issues = ralph.get("issues", [])
+
+            real_status = self.task_manager.get_real_status(task["id"])
+
+            if real_status == "optimizing" or (
+                iteration > 0
+                and task.get("status") not in ["completed", "truly_completed", "force_completed"]
+            ):
+                optimizing_tasks.append(
+                    {
+                        "task": task,
+                        "ralph": ralph,
+                        "iteration": iteration,
+                        "max_iterations": max_iterations,
+                        "quality_checks": quality_checks,
+                        "issues": issues,
+                        "real_status": real_status,
+                    }
+                )
+
+        if optimizing_tasks:
+            print("\n⚠️  优化中任务（优先处理）\n")
+            for item in optimizing_tasks:
+                task = item["task"]
+                ralph = item["ralph"]
+                iteration = item["iteration"]
+                max_iterations = item["max_iterations"]
+                issues = item["issues"]
+                quality_checks = item["quality_checks"]
+
+                task_id = task.get("id", "")
+                desc = task.get("description", "")[:50]
+
+                print(f"【{task_id}】{desc}")
+                print(f"  状态: 🟡 需要优化 (优化轮次: {iteration}/{max_iterations})")
+
+                if issues:
+                    print("\n  ❌ 质量问题:")
+                    for issue in issues[-5:]:
+                        issue_type = issue.get("type", "unknown")
+                        message = issue.get("message", "")
+                        print(f"    • {issue_type}: {message}")
+
+                quality_hints = self._generate_quality_hints(quality_checks)
+                if quality_hints:
+                    print(f"\n  💡 建议: {quality_hints[0]}")
+
+                print(f"\n  📂 相关文件: tasks/{task_id}.md")
+                print()
+
+    def _generate_quality_hints(self, quality_checks: Dict[str, bool]) -> List[str]:
+        """根据质量检查结果生成建议"""
+        hints = []
+        if not quality_checks.get("tests_passed", False):
+            hints.append("检查测试用例，确保测试通过")
+        if not quality_checks.get("lint_passed", False):
+            hints.append("运行代码风格检查并修复问题")
+        if not quality_checks.get("acceptance_met", False):
+            hints.append("完善验收标准，填写测试命令和输出")
+        return hints
 
     def cmd_list(
         self,
@@ -374,7 +448,6 @@ class LRACLI:
             output({"error": "not_found"}, json_mode)
             return
 
-        # 添加锁状态信息
         lock = self.locks_manager.get_lock(task_id)
         if lock:
             task["lock_status"] = lock.get("status", "free")
@@ -384,7 +457,6 @@ class LRACLI:
                 "session_id": lock.get("session_id"),
             }
 
-        # 添加依赖关系
         dependencies = task.get("dependencies", [])
         if dependencies:
             dep_details = []
@@ -400,13 +472,11 @@ class LRACLI:
                     )
             task["dependency_details"] = dep_details
 
-        # 添加任务记录（如果请求）
         if include_records:
             records = self.records_manager.get(task_id)
             if records:
                 task["records"] = records
 
-        # 添加状态流转建议
         template = task.get("template", "task")
         current_status = task.get("status", "pending")
         transitions = self.template_manager.get_transitions_for_template(template)
@@ -416,14 +486,202 @@ class LRACLI:
         if available and not json_mode:
             task["_next_commands"] = [f"lra set {task_id} {s}" for s in available]
 
+        ralph_state = self.task_manager.get_ralph_state(task_id)
+        if ralph_state:
+            task["ralph_state"] = ralph_state
+
+        if not json_mode:
+            if ralph_state and ralph_state.get("iteration", 0) > 0:
+                self._display_iteration_guidance(task_id, task)
+            self._display_ralph_loop_status(task_id, ralph_state)
+
         output(task, json_mode)
+
+    def _display_iteration_guidance(self, task_id: str, task: Dict[str, Any]):
+        """显示迭代阶段引导"""
+        ralph = task.get("ralph", {})
+        iteration = ralph.get("iteration", 1)
+        max_iterations = ralph.get("max_iterations", 7)
+
+        self._display_progress_bar(task_id, iteration, max_iterations)
+
+        stage = ralph.get("current_stage") or self.task_manager.get_iteration_stage(task_id)
+        if stage:
+            self._display_stage_box(stage)
+
+            if "safety_checks" in stage:
+                self._display_safety_checks(stage["safety_checks"])
+
+    def _display_progress_bar(self, task_id: str, current: int, total: int):
+        """显示迭代进度条"""
+        print("\n📊 迭代进度\n")
+
+        percentage = int(current / total * 100)
+        bar_length = 40
+        filled = int(bar_length * current / total)
+        bar = "█" * filled + "░" * (bar_length - filled)
+        print(f"[{bar}] {current}/{total} ({percentage}%)")
+        print()
+
+        task = self.task_manager.get(task_id)
+        if task:
+            template = task.get("template", "task")
+            stages = self.template_manager.load_iteration_stages(template)
+
+            for stage in stages:
+                iter_num = stage.get("iteration", 0)
+                stage_name = stage.get("name", "未知阶段")
+
+                if iter_num < current:
+                    print(f"✓ 迭代{iter_num}: {stage_name} ✓")
+                elif iter_num == current:
+                    print(f"● 迭代{iter_num}: {stage_name} (当前)")
+                else:
+                    print(f"○ 迭代{iter_num}: {stage_name}")
+
+    def _display_stage_box(self, stage: Dict[str, Any]):
+        """显示阶段引导框"""
+        iteration = stage.get("iteration", 1)
+        name = stage.get("name", "未知阶段")
+        focus = stage.get("focus", [])
+        ignore = stage.get("ignore_checks", [])
+        suggestion = stage.get("suggestion", "")
+
+        print("\n╔═══════════════════════════════════════════════════════════╗")
+        print("║                     🎯 迭代阶段引导                        ║")
+        print("╠═══════════════════════════════════════════════════════════╣")
+        print("║                                                           ║")
+        print(f"║  当前迭代: {iteration}/7                                            ║")
+
+        name_padded = f"{name:<44}"
+        print(f"║  阶段名称: {name_padded}║")
+        print("║                                                           ║")
+
+        if focus:
+            print("║  📌 本次重点:                                             ║")
+            for item in focus[:3]:
+                item_padded = f"{item:<48}"
+                print(f"║     • {item_padded}║")
+            print("║                                                           ║")
+
+        if ignore:
+            print("║  ⚠️  应该忽略:                                            ║")
+            for item in ignore[:2]:
+                item_text = f"{item} 检查 (暂时)"
+                item_padded = f"{item_text:<46}"
+                print(f"║     • {item_padded}║")
+            print("║                                                           ║")
+
+        print("╚═══════════════════════════════════════════════════════════╝")
+
+        if suggestion:
+            print(f"\n{suggestion}\n")
+
+    def _display_safety_checks(self, safety_checks: List[Dict[str, Any]]):
+        """显示安全检查提示"""
+        print("\n⚠️  **重构前安全检查**\n")
+        print("重构可能带来风险，请确保：\n")
+
+        for check in safety_checks[:3]:
+            check_type = check.get("type", "")
+            description = check.get("description", "")
+            items = check.get("items", [])
+
+            if check_type and description:
+                print(f"✅ **{description}**：")
+                for item in items[:3]:
+                    print(f"- {item}")
+                print()
+
+    def _display_ralph_loop_status(self, task_id: str, ralph_state: Optional[Dict[str, Any]]):
+        """显示 Ralph Loop 状态"""
+        if not ralph_state:
+            return
+
+        iteration = ralph_state.get("iteration", 0)
+        max_iterations = ralph_state.get("max_iterations", 7)
+        quality_checks = ralph_state.get("quality_checks", {})
+        issues = ralph_state.get("issues", [])
+        optimization_history = ralph_state.get("optimization_history", [])
+
+        print("\n## 🔄 Ralph Loop 状态\n")
+        print(f"当前轮次: {iteration}/{max_iterations}")
+        print(f"已优化次数: {len(optimization_history)}次")
+
+        print("\n### 质量检查结果\n")
+        print("| 检查项 | 状态 | 详情 |")
+        print("|--------|------|------|")
+
+        tests_status = "✅" if quality_checks.get("tests_passed") else "❌"
+        tests_detail = "通过" if quality_checks.get("tests_passed") else "失败"
+        print(f"| 测试通过 | {tests_status} | {tests_detail} |")
+
+        lint_status = "✅" if quality_checks.get("lint_passed") else "❌"
+        lint_detail = "通过" if quality_checks.get("lint_passed") else "失败"
+        print(f"| Lint检查 | {lint_status} | {lint_detail} |")
+
+        acceptance_status = "✅" if quality_checks.get("acceptance_met") else "⚠️"
+        acceptance_detail = "通过" if quality_checks.get("acceptance_met") else "未满足"
+        print(f"| 验收标准 | {acceptance_status} | {acceptance_detail} |")
+
+        failed_items = []
+        if not quality_checks.get("tests_passed"):
+            test_issues = [i for i in issues if i.get("type") == "test_failure"]
+            if test_issues:
+                failed_items.append(("测试", test_issues))
+        if not quality_checks.get("lint_passed"):
+            lint_issues = [i for i in issues if i.get("type") == "lint_error"]
+            if lint_issues:
+                failed_items.append(("Lint", lint_issues))
+        if not quality_checks.get("acceptance_met"):
+            acceptance_issues = [i for i in issues if i.get("type") == "acceptance_incomplete"]
+            if acceptance_issues:
+                failed_items.append(("验收", acceptance_issues))
+
+        if failed_items:
+            print("\n### ❌ 失败的检查项\n")
+            for check_type, check_issues in failed_items:
+                print(f"**{check_type}检查失败**:")
+                for issue in check_issues[-3:]:
+                    print(f"  - {issue.get('message', '未知问题')}")
+                print()
+
+        if optimization_history:
+            print("\n### 📝 优化历史\n")
+            for i, entry in enumerate(optimization_history[-5:], 1):
+                desc = entry.get("description", entry.get("changes", "优化操作"))
+                timestamp = entry.get("timestamp", "")
+                if timestamp:
+                    timestamp = timestamp[11:16]
+                print(f"{i}. [{timestamp}] {desc[:60]}")
+            print()
+
+        real_status = self.task_manager.get_real_status(task_id)
+        print(f"\n### 下一步操作\n")
+        if real_status == "completed":
+            print("质量检查未通过，需要优化代码")
+            print(f"建议: lra quality-check {task_id}  # 查看详细质量报告")
+        elif real_status == "optimizing":
+            if iteration < max_iterations:
+                remaining = max_iterations - iteration
+                print(f"继续优化 (剩余 {remaining} 次迭代)")
+                print(f"建议: 根据上述失败项进行修复")
+            else:
+                print("已达到优化上限")
+                print(f"建议: 人工审核后执行 lra set {task_id} force_completed")
+        elif real_status == "truly_completed":
+            print("✅ 质量检查通过，任务完成")
+        print()
 
     def cmd_set(self, task_id: str, status: str, json_mode: bool = False):
         if not self._check_project():
             output({"error": "not_initialized"}, json_mode)
             return
 
-        # 先检查当前状态
+        if status == "force_next_stage":
+            self._force_next_stage(task_id, json_mode)
+            return
+
         current_task = self.task_manager.get(task_id)
         if not current_task:
             output({"error": "not_found"}, json_mode)
@@ -442,7 +700,6 @@ class LRACLI:
             )
             return
 
-        # 检查状态流转是否合法
         template = current_task.get("template", "task")
         transitions = self.template_manager.get_transitions_for_template(template)
         available_transitions = transitions.get(current_status, [])
@@ -464,7 +721,6 @@ class LRACLI:
                 self.locks_manager.release(task_id)
 
             if not json_mode:
-                # 显示新的可用流转
                 new_transitions = transitions.get(status, [])
                 print(f"✅ 状态已更新：{task_id}")
                 print(f"   新状态：{status}")
@@ -472,7 +728,184 @@ class LRACLI:
                     print(f"   可用状态流转：→ {', '.join(new_transitions)}")
                 else:
                     print(f"   已到达终态")
+
+                if status == "completed":
+                    self._run_quality_check_on_complete(task_id, template, json_mode)
+
         output({"ok": success, "status": msg}, json_mode)
+
+    def _run_quality_check_on_complete(self, task_id: str, template: str, json_mode: bool):
+        """完成任务时自动运行质量检查"""
+        print(f"\n🔍 自动运行质量检查...\n")
+
+        try:
+            qc = QualityChecker()
+            result = qc.check_quality_by_template(task_id, template)
+
+            score = result.get("score", 0)
+            max_score = result.get("max_score", 100)
+            checks = result.get("checks", [])
+            failed_required = result.get("failed_required", [])
+
+            self._record_quality_check_result(task_id, result)
+
+            can_complete_early, early_details = self.task_manager.can_complete_early(task_id)
+
+            if can_complete_early:
+                iteration = early_details.get("iteration", 1)
+                max_iterations = early_details.get("max_iterations", 7)
+
+                print(f"✅ 质量检查全部通过")
+                print(f"   得分: {score}/{max_score}")
+
+                if iteration < max_iterations:
+                    print(f"\n🎉 恭喜！任务可提前完成（迭代 {iteration}/{max_iterations}）")
+                    print(f"\n💡 你已完成所有必需的质量检查，可以选择：")
+                    print(f"   1. 提前完成（推荐）")
+                    print(f"   2. 继续优化（可选）")
+                    print()
+                else:
+                    print()
+
+                success, _ = self.task_manager.update_status(task_id, "truly_completed", force=True)
+                if success:
+                    print(f"✅ 状态已自动更新为: truly_completed")
+                    if iteration < max_iterations:
+                        print(f"   任务已提前完成！")
+            elif failed_required:
+                print(f"❌ 质量检查未通过:")
+                for check in checks:
+                    if not check.get("passed") and check.get("required"):
+                        check_type = check.get("type", "unknown")
+                        issues = check.get("issues", [])
+                        if issues:
+                            for issue in issues[:3]:
+                                print(f"  • {check_type}: {issue.get('message', '未知问题')}")
+                        else:
+                            print(f"  • {check_type}: 检查未通过")
+
+                ralph_state = self.task_manager.get_ralph_state(task_id) or {}
+                iteration = ralph_state.get("iteration", 0)
+                max_iterations = ralph_state.get("max_iterations", 7)
+
+                is_stuck, stuck_count = self.task_manager.check_stage_stuck(task_id, threshold=3)
+
+                if is_stuck:
+                    current_stage = ralph_state.get("current_stage", {})
+                    stage_name = current_stage.get("name", "未知阶段")
+
+                    print(f"\n⚠️  警告：在【{stage_name}】阶段已尝试 {stuck_count} 次")
+                    print(f"   当前迭代: {iteration}/{max_iterations}")
+                    print(f"\n❌ 质量检查仍未通过:")
+                    for check in failed_required:
+                        print(f"   • {check}")
+
+                    print(f"\n💡 建议选项：")
+                    print(f"   1. 强制进入下一阶段（放弃当前阶段目标）")
+                    print(f"      执行: lra set {task_id} force_next_stage")
+                    print(f"   2. 继续尝试当前阶段")
+                    print(f"      继续工作并提交: lra set {task_id} completed")
+
+                success, new_iter = self.task_manager.increment_iteration(task_id)
+                if success:
+                    self._record_quality_check_result(task_id, result)
+                    print(f"\n进入优化循环 ({new_iter}/{max_iterations})")
+                    print(f"\n💡 建议操作:")
+                    print(f"   lra show {task_id}          # 查看详细优化状态")
+                    print(f"   lra quality-check {task_id} # 查看完整质量报告")
+
+                    success, _ = self.task_manager.update_status(task_id, "optimizing", force=True)
+                    if success:
+                        print(f"\n状态已自动更新为: optimizing")
+                else:
+                    print(f"\n⚠️  已达到优化上限 ({max_iterations} 次)")
+                    print(f"建议人工审核后执行: lra set {task_id} force_completed")
+            else:
+                print(f"✅ 质量检查通过")
+                print(f"   得分: {score}/{max_score}")
+                self._record_quality_check_result(task_id, result)
+
+                success, _ = self.task_manager.update_status(task_id, "truly_completed", force=True)
+                if success:
+                    print(f"\n状态已自动更新为: truly_completed")
+
+        except Exception as e:
+            print(f"⚠️  质量检查失败: {str(e)}")
+            print(f"   任务状态保持: completed")
+
+    def _record_quality_check_result(self, task_id: str, result: Dict[str, Any]):
+        """记录质量检查结果到任务的 ralph 状态"""
+        checks = result.get("checks", [])
+
+        tests_passed = False
+        lint_passed = False
+        acceptance_met = False
+
+        for check in checks:
+            check_type = check.get("type")
+            if check_type == "test":
+                tests_passed = check.get("passed", False)
+            elif check_type == "lint":
+                lint_passed = check.get("passed", False)
+            elif check_type == "acceptance":
+                acceptance_met = check.get("passed", False)
+
+        self.task_manager.record_quality_check(
+            task_id,
+            {
+                "tests_passed": tests_passed,
+                "lint_passed": lint_passed,
+                "acceptance_met": acceptance_met,
+            },
+        )
+
+        for check in checks:
+            if not check.get("passed"):
+                check_type = check.get("type", "unknown")
+                issues = check.get("issues", [])
+                for issue in issues[:2]:
+                    self.task_manager.add_ralph_issue(
+                        task_id,
+                        f"{check_type}_issue",
+                        issue.get("message", "检查未通过"),
+                    )
+
+    def _force_next_stage(self, task_id: str, json_mode: bool):
+        """强制进入下一阶段"""
+        if not json_mode:
+            print(f"\n🚀 强制进入下一阶段...\n")
+
+        task = self.task_manager.get(task_id)
+        if not task:
+            print(f"❌ 任务不存在: {task_id}")
+            return
+
+        ralph = task.get("ralph", {})
+        current_iteration = ralph.get("iteration", 1)
+        max_iterations = ralph.get("max_iterations", 7)
+
+        if current_iteration >= max_iterations:
+            print(f"❌ 已达到最大迭代次数 ({max_iterations})，无法进入下一阶段")
+            print(f"   建议: lra set {task_id} force_completed")
+            return
+
+        success, new_iteration = self.task_manager.increment_iteration(task_id)
+
+        if success:
+            next_stage = self.task_manager.get_iteration_stage(task_id, new_iteration)
+            stage_name = next_stage.get("name", "未知阶段") if next_stage else "未知阶段"
+
+            print(f"✅ 已进入迭代 {new_iteration}/{max_iterations}")
+            print(f"   新阶段: {stage_name}\n")
+
+            suggestion = self.task_manager.get_stage_suggestion(task_id)
+            print(suggestion)
+
+            self.task_manager.update_status(task_id, "optimizing", force=True)
+
+            print(f"\n💡 提示: 查看完整引导: lra show {task_id}")
+        else:
+            print(f"❌ 强制进入下一阶段失败")
 
     def _get_final_states_for_task(self, task_id: str) -> List[str]:
         task = self.task_manager.get(task_id)

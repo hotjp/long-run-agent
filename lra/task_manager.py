@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 任务管理器
-v3.4 - 项目级模板固定
+v3.5 - 支持 Ralph Loop 状态跟踪
 """
 
 import json
@@ -281,6 +281,17 @@ class TaskManager:
             "dependencies": dependencies or [],
             "dependency_type": dependency_type,
             "deadline": deadline,
+            "ralph": {
+                "iteration": 0,
+                "max_iterations": 7,
+                "quality_checks": {
+                    "tests_passed": False,
+                    "lint_passed": False,
+                    "acceptance_met": False,
+                },
+                "issues": [],
+                "optimization_history": [],
+            },
         }
 
         data["tasks"].append(task)
@@ -336,7 +347,7 @@ class TaskManager:
                 return t
         return None
 
-    def update_status(self, task_id: str, status: str) -> Tuple[bool, str]:
+    def update_status(self, task_id: str, status: str, force: bool = False) -> Tuple[bool, str]:
         data = self._load()
         if not data:
             return False, "not_initialized"
@@ -354,6 +365,44 @@ class TaskManager:
                 template = t.get("template", "task")
                 current = t.get("status", "pending")
 
+                # Ralph Loop 状态转换逻辑
+                if not force:
+                    current_real_status = self.get_real_status(task_id)
+
+                    # completed -> optimizing (质量检查不通过)
+                    if current_real_status == "completed" and status == "optimizing":
+                        if not self._validate_quality_passed(t):
+                            if not self.template_manager.validate_transition(
+                                template, current, status
+                            ):
+                                return False, f"invalid_transition:{current}->{status}"
+                            t["status"] = status
+                            t["updated_at"] = datetime.now().isoformat()
+                            self._save(data)
+                            return True, status
+
+                    # optimizing -> truly_completed (质量检查通过)
+                    elif current_real_status == "optimizing" and status == "truly_completed":
+                        if self._validate_quality_passed(t):
+                            t["status"] = status
+                            t["updated_at"] = datetime.now().isoformat()
+                            self._save(data)
+                            if self._is_final_status(t, status):
+                                self._unblock_dependents(task_id)
+                            return True, status
+
+                    # optimizing -> force_completed (达到优化上限)
+                    elif current_real_status == "optimizing" and status == "force_completed":
+                        ralph_state = t.get("ralph", {})
+                        if ralph_state.get("iteration", 0) >= ralph_state.get("max_iterations", 7):
+                            t["status"] = status
+                            t["updated_at"] = datetime.now().isoformat()
+                            self._save(data)
+                            if self._is_final_status(t, status):
+                                self._unblock_dependents(task_id)
+                            return True, status
+
+                # 正常状态流转
                 if not self.template_manager.validate_transition(template, current, status):
                     return False, f"invalid_transition:{current}->{status}"
 
@@ -987,3 +1036,485 @@ class TaskManager:
             result["state"] = "initialized"
 
         return result
+
+    # ========== v3.5 Ralph Loop 状态管理方法 ==========
+
+    def get_ralph_state(self, task_id: str) -> Optional[Dict[str, Any]]:
+        """获取任务的 Ralph 状态"""
+        task = self.get(task_id)
+        if not task:
+            return None
+
+        return task.get(
+            "ralph",
+            {
+                "iteration": 0,
+                "max_iterations": 7,
+                "quality_checks": {
+                    "tests_passed": False,
+                    "lint_passed": False,
+                    "acceptance_met": False,
+                },
+                "issues": [],
+                "optimization_history": [],
+            },
+        )
+
+    def update_ralph_state(self, task_id: str, ralph_state: Dict[str, Any]) -> Tuple[bool, str]:
+        """更新任务的 Ralph 状态"""
+        data = self._load()
+        if not data:
+            return False, "not_initialized"
+
+        for t in data.get("tasks", []):
+            if t.get("id") == task_id:
+                existing_ralph = t.get("ralph", {})
+                existing_ralph.update(ralph_state)
+                t["ralph"] = existing_ralph
+                t["updated_at"] = datetime.now().isoformat()
+                self._save(data)
+                return True, "updated"
+
+        return False, "not_found"
+
+    def increment_iteration(self, task_id: str) -> Tuple[bool, int]:
+        """增加迭代计数，返回新的迭代次数，并自动更新当前阶段"""
+        data = self._load()
+        if not data:
+            return False, 0
+
+        for t in data.get("tasks", []):
+            if t.get("id") == task_id:
+                ralph = t.get("ralph", {})
+                current_iteration = ralph.get("iteration", 0)
+                max_iterations = ralph.get("max_iterations", 7)
+
+                if current_iteration >= max_iterations:
+                    return False, current_iteration
+
+                new_iteration = current_iteration + 1
+                ralph["iteration"] = new_iteration
+                t["ralph"] = ralph
+                t["updated_at"] = datetime.now().isoformat()
+                self._save(data)
+
+                self.update_iteration_stage(task_id)
+
+                return True, new_iteration
+
+        return False, 0
+
+    def record_quality_check(self, task_id: str, checks: Dict[str, bool]) -> Tuple[bool, str]:
+        """记录质量检查结果"""
+        data = self._load()
+        if not data:
+            return False, "not_initialized"
+
+        for t in data.get("tasks", []):
+            if t.get("id") == task_id:
+                ralph = t.get("ralph", {})
+                quality_checks = ralph.get("quality_checks", {})
+                quality_checks.update(checks)
+                ralph["quality_checks"] = quality_checks
+                t["ralph"] = ralph
+                t["updated_at"] = datetime.now().isoformat()
+                self._save(data)
+                return True, "updated"
+
+        return False, "not_found"
+
+    def add_optimization_history(self, task_id: str, entry: Dict[str, Any]) -> Tuple[bool, str]:
+        """添加优化历史记录"""
+        data = self._load()
+        if not data:
+            return False, "not_initialized"
+
+        for t in data.get("tasks", []):
+            if t.get("id") == task_id:
+                ralph = t.get("ralph", {})
+                optimization_history = ralph.get("optimization_history", [])
+
+                if "timestamp" not in entry:
+                    entry["timestamp"] = datetime.now().isoformat()
+
+                optimization_history.append(entry)
+                ralph["optimization_history"] = optimization_history
+                t["ralph"] = ralph
+                t["updated_at"] = datetime.now().isoformat()
+                self._save(data)
+                return True, "added"
+
+        return False, "not_found"
+
+    def add_ralph_issue(
+        self, task_id: str, issue_type: str, message: str, round_num: int = None
+    ) -> Tuple[bool, str]:
+        """添加 Ralph 问题记录"""
+        data = self._load()
+        if not data:
+            return False, "not_initialized"
+
+        for t in data.get("tasks", []):
+            if t.get("id") == task_id:
+                ralph = t.get("ralph", {})
+                issues = ralph.get("issues", [])
+
+                if round_num is None:
+                    round_num = ralph.get("iteration", 1)
+
+                issue_entry = {
+                    "round": round_num,
+                    "type": issue_type,
+                    "message": message,
+                    "timestamp": datetime.now().isoformat(),
+                }
+
+                issues.append(issue_entry)
+                ralph["issues"] = issues
+                t["ralph"] = ralph
+                t["updated_at"] = datetime.now().isoformat()
+                self._save(data)
+                return True, "added"
+
+        return False, "not_found"
+
+    def get_real_status(self, task_id: str) -> str:
+        """
+        获取任务的真实状态
+
+        状态分类：
+        - pending/in_progress: 正常状态
+        - completed: 第一次完成（待质量检查）
+        - optimizing: 优化循环中
+        - truly_completed: 质量检查通过
+        - force_completed: 达到优化上限强制完成
+        """
+        task = self.get(task_id)
+        if not task:
+            return "not_found"
+
+        status = task.get("status", "pending")
+
+        if status == "completed":
+            ralph = task.get("ralph", {})
+            iteration = ralph.get("iteration", 0)
+
+            if iteration > 0:
+                if self._validate_quality_passed(task):
+                    return "truly_completed"
+                else:
+                    return "completed"
+
+        return status
+
+    def _validate_quality_passed(self, task: Dict[str, Any]) -> bool:
+        """验证质量检查是否全部通过"""
+        ralph = task.get("ralph", {})
+        quality_checks = ralph.get("quality_checks", {})
+
+        tests_passed = quality_checks.get("tests_passed", False)
+        lint_passed = quality_checks.get("lint_passed", False)
+        acceptance_met = quality_checks.get("acceptance_met", False)
+
+        return tests_passed and lint_passed and acceptance_met
+
+    def set_max_iterations(self, task_id: str, max_iterations: int) -> Tuple[bool, str]:
+        """设置最大迭代次数"""
+        data = self._load()
+        if not data:
+            return False, "not_initialized"
+
+        for t in data.get("tasks", []):
+            if t.get("id") == task_id:
+                ralph = t.get("ralph", {})
+                ralph["max_iterations"] = max_iterations
+                t["ralph"] = ralph
+                t["updated_at"] = datetime.now().isoformat()
+                self._save(data)
+                return True, "updated"
+
+        return False, "not_found"
+
+    def can_continue_optimization(self, task_id: str) -> bool:
+        """检查任务是否可以继续优化"""
+        task = self.get(task_id)
+        if not task:
+            return False
+
+        ralph = task.get("ralph", {})
+        iteration = ralph.get("iteration", 0)
+        max_iterations = ralph.get("max_iterations", 7)
+
+        return iteration < max_iterations
+
+    def get_optimization_summary(self, task_id: str) -> Optional[Dict[str, Any]]:
+        """获取优化摘要"""
+        task = self.get(task_id)
+        if not task:
+            return None
+
+        ralph = task.get("ralph", {})
+        quality_checks = ralph.get("quality_checks", {})
+        issues = ralph.get("issues", [])
+        optimization_history = ralph.get("optimization_history", [])
+
+        issue_types = {}
+        for issue in issues:
+            issue_type = issue.get("type", "unknown")
+            issue_types[issue_type] = issue_types.get(issue_type, 0) + 1
+
+        return {
+            "iteration": ralph.get("iteration", 0),
+            "max_iterations": ralph.get("max_iterations", 7),
+            "total_issues": len(issues),
+            "issue_types": issue_types,
+            "optimization_count": len(optimization_history),
+            "quality_status": {
+                "tests": "passed" if quality_checks.get("tests_passed") else "failed",
+                "lint": "passed" if quality_checks.get("lint_passed") else "failed",
+                "acceptance": "met" if quality_checks.get("acceptance_met") else "not_met",
+            },
+            "can_continue": self.can_continue_optimization(task_id),
+            "real_status": self.get_real_status(task_id),
+        }
+
+    def get_iteration_stage(self, task_id: str, iteration: int = None) -> Optional[Dict[str, Any]]:
+        """
+        获取任务的当前迭代阶段配置
+
+        参数:
+            task_id: 任务ID
+            iteration: 迭代次数（可选，默认使用任务的当前迭代）
+
+        返回:
+            迭代阶段配置字典，包含:
+            - iteration: 迭代次数
+            - name: 阶段名称
+            - focus: 重点列表
+            - priority_checks: 优先检查项
+            - ignore_checks: 忽略检查项
+            - suggestion: 阶段建议
+            - safety_checks: 安全检查（可选）
+        """
+        task = self.get(task_id)
+        if not task:
+            return None
+
+        if iteration is None:
+            ralph = task.get("ralph", {})
+            iteration = ralph.get("iteration", 1)
+
+        template_name = task.get("template", "task")
+
+        stages = self.template_manager.load_iteration_stages(template_name)
+
+        for stage in stages:
+            if stage.get("iteration") == iteration:
+                return stage
+
+        return stages[-1] if stages else None
+
+    def update_iteration_stage(self, task_id: str) -> Tuple[bool, str]:
+        """
+        更新任务的当前迭代阶段到 ralph.current_stage 字段
+
+        参数:
+            task_id: 任务ID
+
+        返回:
+            (是否成功, 消息)
+        """
+        task = self.get(task_id)
+        if not task:
+            return False, "task_not_found"
+
+        ralph = task.get("ralph", {})
+        iteration = ralph.get("iteration", 1)
+
+        stage = self.get_iteration_stage(task_id, iteration)
+        if not stage:
+            return False, "stage_not_found"
+
+        ralph["current_stage"] = stage
+
+        data = self._load()
+        for t in data.get("tasks", []):
+            if t.get("id") == task_id:
+                t["ralph"] = ralph
+                t["updated_at"] = datetime.now().isoformat()
+                self._save(data)
+                return True, "updated"
+
+        return False, "save_failed"
+
+    def get_stage_suggestion(self, task_id: str) -> str:
+        """
+        获取当前阶段建议文本（格式化后）
+
+        返回格式化的建议文本，包含:
+        - 阶段名称
+        - 迭代进度
+        - 重点列表
+        - 详细建议
+        """
+        task = self.get(task_id)
+        if not task:
+            return ""
+
+        ralph = task.get("ralph", {})
+        iteration = ralph.get("iteration", 1)
+        max_iterations = ralph.get("max_iterations", 7)
+
+        stage = ralph.get("current_stage") or self.get_iteration_stage(task_id)
+        if not stage:
+            return ""
+
+        output = []
+        output.append(f"\n📌 当前迭代: {iteration}/{max_iterations}")
+        output.append(f"阶段: {stage.get('name', '未知阶段')}\n")
+
+        focus_list = stage.get("focus", [])
+        if focus_list:
+            output.append("🎯 本次重点:")
+            for item in focus_list:
+                output.append(f"   • {item}")
+
+        suggestion = stage.get("suggestion", "")
+        if suggestion:
+            output.append(f"\n{suggestion}")
+
+        return "\n".join(output)
+
+    def check_stage_stuck(self, task_id: str, threshold: int = 3) -> Tuple[bool, int]:
+        """
+        检查任务是否在当前阶段卡住
+
+        参数:
+            task_id: 任务ID
+            threshold: 阈值（同一阶段超过多少次算卡住）
+
+        返回:
+            (是否卡住, 在当前阶段停留次数)
+
+        逻辑:
+        - 检查 optimization_history 中最近几次的 iteration 值
+        - 如果连续 threshold 次迭代 iteration 值相同，则认为卡住
+        """
+        task = self.get(task_id)
+        if not task:
+            return False, 0
+
+        ralph = task.get("ralph", {})
+        history = ralph.get("optimization_history", [])
+
+        if len(history) < threshold:
+            return False, len(history)
+
+        recent = history[-threshold:]
+
+        iterations = [h.get("iteration") for h in recent]
+
+        if len(set(iterations)) == 1:
+            return True, threshold
+
+        return False, 0
+
+    def can_complete_early(self, task_id: str) -> Tuple[bool, Dict[str, Any]]:
+        """
+        检查任务是否可以提前完成
+
+        参数:
+            task_id: 任务ID
+
+        返回:
+            (是否可以提前完成, 详情)
+
+        判断逻辑:
+            1. 检查所有 required 的质量检查是否通过
+            2. 如果全部通过，返回 True
+            3. 否则返回 False 和未通过的检查项
+        """
+        task = self.get(task_id)
+        if not task:
+            return False, {"error": "task_not_found"}
+
+        ralph = task.get("ralph", {})
+        quality_checks = ralph.get("quality_checks", {})
+
+        template_name = task.get("template", "task")
+        stages = self.template_manager.load_iteration_stages(template_name)
+
+        iteration = ralph.get("iteration", 1)
+        max_iterations = ralph.get("max_iterations", 7)
+
+        current_stage = self.get_iteration_stage(task_id, iteration)
+        if not current_stage:
+            return False, {"error": "stage_not_found"}
+
+        priority_checks = current_stage.get("priority_checks", [])
+
+        check_mapping = {
+            "test": "tests_passed",
+            "test_pass": "tests_passed",
+            "tests_passed": "tests_passed",
+            "lint": "lint_passed",
+            "lint_pass": "lint_passed",
+            "lint_passed": "lint_passed",
+            "acceptance": "acceptance_met",
+            "acceptance_met": "acceptance_met",
+            "syntax_valid": "tests_passed",
+            "goal_understood": "acceptance_met",
+            "criteria_defined": "acceptance_met",
+            "plan_created": "acceptance_met",
+            "core_functional": "tests_passed",
+            "basic_usable": "tests_passed",
+            "correctness_verified": "tests_passed",
+            "features_complete": "acceptance_met",
+            "edge_cases_handled": "tests_passed",
+            "completeness": "acceptance_met",
+            "quality_improved": "lint_passed",
+            "issues_resolved": "tests_passed",
+            "performance_optimized": "tests_passed",
+            "structure_improved": "lint_passed",
+            "details_polished": "lint_passed",
+            "fully_tested": "tests_passed",
+            "reliability_verified": "tests_passed",
+            "completeness_confirmed": "acceptance_met",
+            "documentation_complete": "acceptance_met",
+            "final_check_passed": "tests_passed",
+            "delivery_ready": "acceptance_met",
+            "test_coverage": "tests_passed",
+            "edge_cases": "tests_passed",
+            "type_check": "lint_passed",
+            "performance": "tests_passed",
+            "memory_usage": "tests_passed",
+            "code_duplication": "lint_passed",
+            "design_pattern": "lint_passed",
+            "integration_test": "tests_passed",
+            "performance_test": "tests_passed",
+            "edge_case_test": "tests_passed",
+            "documentation": "acceptance_met",
+            "code_review": "lint_passed",
+        }
+
+        failed_required = []
+        passed_required = []
+
+        for check_type in priority_checks:
+            quality_key = check_mapping.get(check_type, check_type)
+            if not quality_checks.get(quality_key, False):
+                failed_required.append(check_type)
+            else:
+                passed_required.append(check_type)
+
+        can_complete = len(failed_required) == 0
+
+        return can_complete, {
+            "can_complete": can_complete,
+            "failed_required": failed_required,
+            "passed_required": passed_required,
+            "all_quality_checks": quality_checks,
+            "iteration": iteration,
+            "max_iterations": max_iterations,
+            "priority_checks": priority_checks,
+        }

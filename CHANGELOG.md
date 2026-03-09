@@ -2,6 +2,80 @@
 
 All notable changes to this project will be documented in this file.
 
+## [4.1.0] - 2026-03-05
+
+### ✨ 新增功能
+
+#### 迭代阶段引导机制
+
+- **7阶段渐进式优化**：每个任务最多7次迭代，每次迭代有明确的目标和引导
+  - 支持5种模板：code-module, novel-chapter, data-pipeline, doc-update, task
+  - 每个阶段有明确的重点、优先检查项、忽略项和详细建议
+  
+- **提前完成机制**：所有必需检查通过即可提前退出（不必走完7次迭代）
+
+- **阶段卡住检测**：同一阶段失败3次后提示强制进入下一阶段
+  - 新增命令：`lra set <task_id> force_next_stage`
+
+- **重构安全检查**：代码重构阶段提供测试覆盖率检查等安全提示
+
+- **迭代进度可视化**：`lra show` 命令新增迭代进度条和阶段引导框
+
+#### 模板配置扩展
+
+- 所有模板新增 `ralph.iteration_stages` 字段
+- 每个阶段包含：name, focus, priority_checks, ignore_checks, suggestion, safety_checks
+
+#### TaskManager 扩展
+
+新增方法：
+- `get_iteration_stage()` - 获取当前迭代阶段配置
+- `update_iteration_stage()` - 更新迭代阶段
+- `get_stage_suggestion()` - 获取阶段建议文本
+- `check_stage_stuck()` - 检查阶段卡住
+- `can_complete_early()` - 检查是否可提前完成
+
+#### TemplateManager 扩展
+
+新增方法：
+- `load_iteration_stages()` - 加载迭代阶段配置
+- `_validate_stage()` - 验证阶段配置
+- `_get_default_stages()` - 获取默认阶段
+- `get_stage_by_iteration()` - 获取指定阶段
+
+#### CLI 命令增强
+
+- `lra show <id>` - 新增迭代进度条和阶段引导框显示
+- `lra set <id> completed` - 新增提前完成检测和阶段卡住检测
+- `lra set <id> force_next_stage` - 新增强制进入下一阶段命令
+
+### 📚 文档更新
+
+- 更新 README.md 添加迭代阶段引导说明
+- 新增 ITERATION_GUIDANCE_FINAL_REPORT.md（详细实施报告）
+- 新增 ITERATION_GUIDANCE_QUICK_START.md（快速使用指南）
+
+### 🐛 Bug 修复
+
+- 修复了 Ralph Loop 控制器不符合"无状态 CLI 工具"设计理念的问题
+- 删除了不必要的全局状态管理（ralph_loop.py, ralph_config.py, memory/）
+
+### 🔄 变更
+
+- Ralph Loop 机制从"项目级循环"改为"任务级循环"
+- 状态管理从全局改为仅存储在 task_list.json 的任务对象中
+- 优化次数固定为7次
+
+## [4.0.0] - 2026-03-03
+
+### Added
+
+- **Ralph Loop 机制** - 任务级循环优化
+  - 任务完成后自动质量检查
+  - 最多7次优化迭代
+  - 支持提前完成
+  - 错误处理和回滚机制
+
 ## [3.4.1] - 2026-03-02
 
 ### Added

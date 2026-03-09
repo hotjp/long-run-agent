@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LRA - AI Agent 任务管理 + 质量保障系统</title>
-    <meta name="description" content="让 Agent 长时间自动化开发不再崩溃。基于 Anthropic 论文，解决上下文丢失、过度设计、过早完成等核心痛点。">
+    <title>LRA - AI Agent 任务管理 + 质量保障 + 迭代引导系统</title>
+    <meta name="description" content="让 Agent 长时间自动化开发不再崩溃。基于 Anthropic 论文，解决上下文丢失、过度设计、过早完成等核心痛点。v4.1 新增迭代阶段引导。">
     
     <!-- Open Graph -->
     <meta property="og:title" content="LRA - AI Agent 任务管理系统">
@@ -819,7 +819,7 @@
     <!-- Navigation -->
     <nav>
         <div class="nav-container">
-            <div class="logo">LRA v4.0</div>
+            <div class="logo">LRA v4.1</div>
             <ul class="nav-links">
                 <li><a href="#pain-points">痛点</a></li>
                 <li><a href="#features">功能</a></li>
@@ -841,7 +841,7 @@
         <div class="container">
             <div class="hero-content fade-in-up">
                 <span class="badge badge-new">NEW</span>
-                <span class="badge badge-v4">v4.0</span>
+                <span class="badge badge-v4">v4.1</span>
                 <h1>
                     让 Agent 长时间自动化开发<br>
                     <span class="gradient-text">不再崩溃</span>
@@ -1062,6 +1062,7 @@
                         <li><strong>v3.3:</strong> 上下文重建协议（orientation）</li>
                         <li><strong>v3.4:</strong> 系统预检 + 项目分析</li>
                         <li><strong>v4.0:</strong> 完整质量保障系统</li>
+                        <li><strong>v4.1:</strong> 迭代阶段引导机制</li>
                         <li><strong>超越:</strong> 多 Agent 协作 + 模板系统</li>
                     </ul>
                 </div>
@@ -1074,7 +1075,7 @@
         <div class="container">
             <div class="section-header">
                 <h2 class="section-title">一个完整的 Agent 开发工具链</h2>
-                <p class="section-subtitle">6 大核心模块，覆盖 Agent 开发的所有场景</p>
+                <p class="section-subtitle">7 大核心模块，覆盖 Agent 开发的所有场景</p>
             </div>
 
             <div class="features-grid">
@@ -1123,6 +1124,19 @@
                         <li>回归测试（regression-test）</li>
                         <li>浏览器测试（browser-test）</li>
                         <li>代码质量检查（quality-check）</li>
+                    </ul>
+                </div>
+
+                <!-- Iteration Guidance -->
+                <div class="feature-card" style="border-color: var(--accent-purple);">
+                    <div class="feature-icon">🎯</div>
+                    <h3 class="feature-title">迭代阶段引导 <span class="badge badge-new" style="font-size: 0.7rem;">NEW</span></h3>
+                    <ul class="feature-list">
+                        <li><strong>7阶段渐进优化</strong>：明确目标，逐步完善</li>
+                        <li><strong>智能引导</strong>：每阶段有重点和建议</li>
+                        <li><strong>提前完成</strong>：质量达标可提前退出</li>
+                        <li><strong>安全重构</strong>：重构前自动检查覆盖率</li>
+                        <li><strong>进度可视化</strong>：实时查看迭代进度</li>
                     </ul>
                 </div>
 
@@ -1248,23 +1262,23 @@
                         <span class="case-tag">实际案例</span>
                     </div>
                     <p style="color: var(--text-secondary);">
-                        LRA v4.0 使用 LRA 自身进行开发管理，实现了完整的自举
+                        LRA v4.0 + v4.1 使用 LRA 自身进行开发管理，实现了完整的自举。v4.1 的迭代阶段引导机制更是通过 Ralph Loop（任务级循环）机制实现自我验证。
                     </p>
                     <div class="case-stats">
                         <div class="case-stat">
-                            <div class="case-stat-value">22</div>
+                            <div class="case-stat-value">25+</div>
                             <div class="case-stat-label">代码文件</div>
                         </div>
                         <div class="case-stat">
-                            <div class="case-stat-value">8,795</div>
+                            <div class="case-stat-value">11,500+</div>
                             <div class="case-stat-label">代码行数</div>
                         </div>
                         <div class="case-stat">
-                            <div class="case-stat-value">31</div>
+                            <div class="case-stat-value">35+</div>
                             <div class="case-stat-label">命令</div>
                         </div>
                         <div class="case-stat">
-                            <div class="case-stat-value">12</div>
+                            <div class="case-stat-value">15+</div>
                             <div class="case-stat-label">单元测试</div>
                         </div>
                         <div class="case-stat">
