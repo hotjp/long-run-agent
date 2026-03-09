@@ -12,7 +12,7 @@ import time
 from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime
 
-CURRENT_VERSION = "4.0.1"
+CURRENT_VERSION = "5.0.0"
 SCHEMA_VERSION = "2026-02-25"
 
 
@@ -81,6 +81,11 @@ class Config:
     @classmethod
     def get_metadata_dir(cls) -> str:
         return os.path.abspath(cls.METADATA_DIR)
+
+    @classmethod
+    def get_config_dir(cls) -> str:
+        """获取配置目录路径（与metadata_dir相同）"""
+        return cls.get_metadata_dir()
 
     @classmethod
     def get_task_list_path(cls) -> str:

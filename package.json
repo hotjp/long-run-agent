@@ -1,6 +1,6 @@
 {
   "name": "lra",
-  "version": "4.0.0",
+  "version": "5.0.0",
   "description": "A powerful framework for managing long-running AI Agent tasks with quality assurance",
   "keywords": [
     "ai",
