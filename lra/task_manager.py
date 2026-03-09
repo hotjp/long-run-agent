@@ -365,6 +365,34 @@ class TaskManager:
                 template = t.get("template", "task")
                 current = t.get("status", "pending")
 
+                # 🆕 Constitution强制验证 - 在completed状态时自动检查
+                if status in ["completed", "truly_completed"] and not force:
+                    constitution_result = self._validate_constitution(task_id, t, template)
+                    if not constitution_result["passed"]:
+                        # Constitution验证失败，自动进入optimizing状态
+                        if status == "completed":
+                            t["status"] = "optimizing"
+                            t["updated_at"] = datetime.now().isoformat()
+
+                            # 初始化Ralph Loop状态
+                            if "ralph" not in t:
+                                t["ralph"] = {
+                                    "iteration": 0,
+                                    "max_iterations": 7,
+                                    "quality_checks": {},
+                                    "issues": constitution_result.get("failures", []),
+                                    "optimization_history": [],
+                                }
+                            else:
+                                t["ralph"]["issues"] = constitution_result.get("failures", [])
+
+                            self._save(data)
+
+                            return (
+                                False,
+                                f"constitution_failed:{'; '.join(constitution_result.get('failures', []))}",
+                            )
+
                 # Ralph Loop 状态转换逻辑
                 if not force:
                     current_real_status = self.get_real_status(task_id)
@@ -381,8 +409,18 @@ class TaskManager:
                             self._save(data)
                             return True, status
 
-                    # optimizing -> truly_completed (质量检查通过)
+                    # optimizing -> truly_completed (质量检查通过 + Constitution验证)
                     elif current_real_status == "optimizing" and status == "truly_completed":
+                        # 🆕 先验证Constitution
+                        constitution_result = self._validate_constitution(task_id, t, template)
+                        if not constitution_result["passed"]:
+                            # Constitution验证失败，继续迭代
+                            return (
+                                False,
+                                f"constitution_failed:{'; '.join(constitution_result.get('failures', []))}",
+                            )
+
+                        # 质量检查通过
                         if self._validate_quality_passed(t):
                             t["status"] = status
                             t["updated_at"] = datetime.now().isoformat()
@@ -395,6 +433,17 @@ class TaskManager:
                     elif current_real_status == "optimizing" and status == "force_completed":
                         ralph_state = t.get("ralph", {})
                         if ralph_state.get("iteration", 0) >= ralph_state.get("max_iterations", 7):
+                            # 🆕 即使强制完成，也要检查NON_NEGOTIABLE原则
+                            constitution_result = self._validate_constitution(
+                                task_id, t, template, check_non_negotiable_only=True
+                            )
+                            if not constitution_result["passed"]:
+                                # NON_NEGOTIABLE原则不能违反
+                                return (
+                                    False,
+                                    f"constitution_non_negotiable_violation:{'; '.join(constitution_result.get('failures', []))}",
+                                )
+
                             t["status"] = status
                             t["updated_at"] = datetime.now().isoformat()
                             self._save(data)
@@ -427,6 +476,47 @@ class TaskManager:
 
                 return True, status
         return False, "not_found"
+
+    def _validate_constitution(
+        self,
+        task_id: str,
+        task: Dict[str, Any],
+        template: str,
+        check_non_negotiable_only: bool = False,
+    ) -> Dict[str, Any]:
+        """验证Constitution原则"""
+        try:
+            from lra.constitution import ConstitutionManager, PrincipleValidator
+
+            manager = ConstitutionManager()
+            validator = PrincipleValidator(manager)
+
+            # 如果只检查NON_NEGOTIABLE原则
+            if check_non_negotiable_only:
+                principles = manager.get_non_negotiable_principles()
+                all_failures = []
+
+                for principle in principles:
+                    result = validator.validate_principle(principle, task_id, task)
+                    if not result.passed:
+                        all_failures.extend(result.failures)
+
+                return {"passed": len(all_failures) == 0, "failures": all_failures}
+
+            # 完整验证
+            result = validator.validate_all_principles(task_id, task, template)
+
+            return {
+                "passed": result.passed,
+                "failures": result.failures,
+                "warnings": result.warnings,
+                "gate_results": result.gate_results,
+            }
+
+        except Exception as e:
+            # Constitution验证异常，默认通过（避免阻塞）
+            print(f"⚠️  Constitution验证异常: {e}")
+            return {"passed": True, "failures": [], "warnings": [f"Constitution验证异常: {e}"]}
 
     def _is_final_status(self, task: Dict[str, Any], status: str) -> bool:
         """判断是否为终态"""

@@ -31,12 +31,18 @@ except:
 
 
 AGENT_GUIDE = """
-LRA v4.0 | AI Agent 任务管理 + 质量保障
+LRA v5.0 | AI Agent 任务管理 + 质量保障 + Constitution
 
 🚀 快速开始
    lra start                           # 智能启动（推荐）
    lra init --name <项目名>             # 初始化项目
    lra analyze-project                 # 生成文档+索引
+
+🏛️  Constitution (🆕 v5.0)
+   lra constitution init               # 初始化Constitution
+   lra constitution show               # 查看配置
+   lra constitution validate           # 验证配置
+   lra constitution help               # 使用指南
 
 📂 常用命令（按工作流）
    项目: start | init | context | status | orientation | analyze-project
@@ -48,6 +54,7 @@ LRA v4.0 | AI Agent 任务管理 + 质量保障
 
 🔐 锁机制: claim → heartbeat → publish
 🧪 质量保障: regression-test → browser-test → quality-check
+🏛️  Constitution: init → create → completed (自动验证)
 💡 提示: list自动显示下一步，show显示状态流转
 
 📚 帮助
@@ -167,6 +174,157 @@ class LRACLI:
             print(f"   lra context                # 查看项目状态")
             print(f'   lra create "任务描述"      # 创建第一个任务')
             print(f"\n🤖 Agent 索引: .long-run-agent/analysis/index.json")
+
+            # 🆕 自动创建Constitution
+            from lra.constitution import init_constitution
+            from lra.guide import NextStepGuide
+
+            success, msg = init_constitution(name)
+            if success:
+                print(f"\n{NextStepGuide.after_init(name)}")
+
+    def cmd_constitution(self, action: str, json_mode: bool = False):
+        """Constitution管理命令"""
+        from lra.constitution import ConstitutionManager, init_constitution
+        from lra.guide import NextStepGuide
+
+        if action == "init":
+            # 初始化Constitution
+            config = self.task_manager._load_config()
+            project_name = config.get("project_name", "My Project") if config else "My Project"
+
+            success, msg = init_constitution(project_name)
+
+            if json_mode:
+                output({"ok": success, "message": msg}, json_mode)
+            else:
+                if success:
+                    print(f"✅ {msg}")
+                    print(NextStepGuide.after_constitution_init())
+                else:
+                    print(f"⚠️  {msg}")
+
+        elif action == "validate":
+            # 验证Constitution
+            try:
+                manager = ConstitutionManager()
+                principles = manager.get_all_applicable_principles()
+
+                if json_mode:
+                    output(
+                        {"ok": True, "valid": True, "principles_count": len(principles)}, json_mode
+                    )
+                else:
+                    print("✅ Constitution有效\n")
+                    print(f"   Schema版本: {manager.constitution['schema_version']}")
+                    print(f"   项目名: {manager.constitution['project']['name']}")
+                    print(f"   原则数: {len(principles)}")
+
+                    non_negotiable = manager.get_non_negotiable_principles()
+                    mandatory = manager.get_mandatory_principles()
+                    configurable = manager.get_enabled_configurable_principles()
+
+                    print(f"\n   不可协商: {len(non_negotiable)}个")
+                    print(f"   强制: {len(mandatory)}个")
+                    print(f"   可配置: {len(configurable)}个")
+
+            except Exception as e:
+                if json_mode:
+                    output({"ok": False, "error": str(e)}, json_mode)
+                else:
+                    print(f"❌ Constitution验证失败: {e}")
+
+        elif action == "show":
+            # 显示Constitution详情
+            try:
+                manager = ConstitutionManager()
+                constitution = manager.constitution
+
+                if json_mode:
+                    output({"ok": True, "constitution": constitution}, json_mode)
+                else:
+                    print("🏛️  Constitution配置\n")
+                    print(f"Schema版本: {constitution['schema_version']}")
+                    print(f"项目: {constitution['project']['name']}")
+                    print(f"版本: {constitution['project']['version']}")
+                    print(f"批准日期: {constitution['project']['ratified']}")
+
+                    print("\n📋 核心原则:\n")
+
+                    for i, principle in enumerate(constitution.get("core_principles", []), 1):
+                        principle_type = principle.get("type", "UNKNOWN")
+                        type_emoji = {
+                            "NON_NEGOTIABLE": "🔴",
+                            "MANDATORY": "🟡",
+                            "CONFIGURABLE": "🟢",
+                        }.get(principle_type, "⚪")
+
+                        enabled = principle.get("enabled", True)
+                        enabled_str = (
+                            "" if enabled or principle_type != "CONFIGURABLE" else " (已禁用)"
+                        )
+
+                        print(f"{i}. {type_emoji} {principle['name']}{enabled_str}")
+                        print(f"   类型: {principle_type}")
+                        print(f"   描述: {principle['description']}")
+
+                        gates = principle.get("gates", [])
+                        if gates:
+                            print(f"   门禁: {len(gates)}个")
+                            for gate in gates:
+                                gate_type = gate.get("type", "unknown")
+                                gate_name = gate.get("name", "unnamed")
+                                print(f"     • {gate_name} ({gate_type})")
+                        print()
+
+                    template_gates = constitution.get("template_gates", {})
+                    if template_gates:
+                        print("📦 模板特定门禁:\n")
+                        for template, gates in template_gates.items():
+                            print(f"  {template}: {len(gates)}个门禁")
+                        print()
+
+                    print("💡 提示:")
+                    print("   • 编辑配置: .long-run-agent/constitution.yaml")
+                    print("   • 验证配置: lra constitution validate")
+                    print("   • 查看帮助: lra constitution --help")
+
+            except Exception as e:
+                if json_mode:
+                    output({"ok": False, "error": str(e)}, json_mode)
+                else:
+                    print(f"❌ 读取Constitution失败: {e}")
+
+        elif action == "reload":
+            # 重新加载Constitution
+            try:
+                manager = ConstitutionManager()
+                manager.reload()
+
+                if json_mode:
+                    output({"ok": True, "message": "Constitution reloaded"}, json_mode)
+                else:
+                    print("✅ Constitution已重新加载")
+
+            except Exception as e:
+                if json_mode:
+                    output({"ok": False, "error": str(e)}, json_mode)
+                else:
+                    print(f"❌ 重新加载失败: {e}")
+
+        elif action == "help":
+            # 显示帮助
+            if json_mode:
+                output({"ok": True, "help": NextStepGuide.constitution_help()}, json_mode)
+            else:
+                print(NextStepGuide.constitution_help())
+
+        else:
+            if json_mode:
+                output({"ok": False, "error": f"Unknown action: {action}"}, json_mode)
+            else:
+                print(f"❌ 未知操作: {action}")
+                print("   支持的操作: init, validate, show, reload, help")
 
     def cmd_context(self, output_limit: str = "8k", json_mode: bool = False):
         if not self._check_project():
@@ -411,23 +569,21 @@ class LRACLI:
                 # 显示任务创建成功信息
                 template = result.get("template", "task")
                 status = result.get("status", "pending")
+                task_id = result.get("id")
 
                 # 获取状态流转信息
                 transitions = self.template_manager.get_transitions_for_template(template)
                 available_transitions = transitions.get(status, [])
 
-                print(f"✅ 任务已创建：{result.get('id')}")
-                print(f"   描述：{result.get('description', '')[:60]}")
-                print(f"   状态：{status}")
-                print(f"   模板：{template}")
-                if available_transitions:
-                    print(f"   可用状态流转：→ {', '.join(available_transitions)}")
-                print(f"   使用：lra set {result.get('id')} <status> 更新状态")
+                # 🆕 使用引导系统
+                from lra.guide import NextStepGuide
+
+                print(NextStepGuide.after_create(task_id, template))
 
                 # v3.3.3: 智能提示系统
                 tip = self._get_tip_for_command("create", description)
                 if tip:
-                    print(f"\n{tip}")
+                    print(f"{tip}")
         else:
             # v3.3.3: 严重错误才显示
             if result.get("error") == "cycle_dependency":
@@ -731,6 +887,54 @@ class LRACLI:
 
                 if status == "completed":
                     self._run_quality_check_on_complete(task_id, template, json_mode)
+
+        else:
+            # 🆕 处理Constitution验证失败
+            if not json_mode and "constitution_failed" in msg:
+                print(f"\n❌ Constitution验证失败\n")
+                print(f"   任务: {task_id}")
+                print(f"   状态: 自动进入 optimizing (优化中)\n")
+
+                # 解析失败原因
+                failures_str = msg.replace("constitution_failed:", "")
+                failures = [f.strip() for f in failures_str.split(";") if f.strip()]
+
+                print("📋 失败项:\n")
+                for i, failure in enumerate(failures[:5], 1):  # 只显示前5个
+                    print(f"   {i}. {failure}")
+
+                if len(failures) > 5:
+                    print(f"   ... 还有 {len(failures) - 5} 项未显示\n")
+                else:
+                    print()
+
+                print("💡 修复建议:\n")
+                print("   1. 查看任务详情: lra show", task_id)
+                print("   2. 修复上述问题")
+                print("   3. 重新标记完成: lra set", task_id, "completed")
+                print("   4. 查看Constitution: lra constitution show\n")
+
+                print("📚 帮助: lra constitution help\n")
+
+            elif not json_mode and "constitution_non_negotiable_violation" in msg:
+                print(f"\n❌ 违反不可协商原则\n")
+                print(f"   任务: {task_id}\n")
+
+                failures_str = msg.replace("constitution_non_negotiable_violation:", "")
+                failures = [f.strip() for f in failures_str.split(";") if f.strip()]
+
+                print("🔴 不可协商原则违反:\n")
+                for i, failure in enumerate(failures, 1):
+                    print(f"   {i}. {failure}")
+
+                print("\n⚠️  不可协商原则不能绕过，必须修复问题\n")
+                print("💡 修复建议:\n")
+                print("   1. 查看任务详情: lra show", task_id)
+                print("   2. 修复上述问题")
+                print("   3. 重新标记完成: lra set", task_id, "completed\n")
+
+            else:
+                output({"ok": success, "status": msg}, json_mode)
 
         output({"ok": success, "status": msg}, json_mode)
 
@@ -2072,6 +2276,19 @@ def main():
         help="Default template (default: task)",
     )
 
+    # constitution
+    const_p = subparsers.add_parser(
+        "constitution",
+        help="Constitution management",
+        description="Manage project Constitution (quality principles and gates). "
+        "Constitution defines non-negotiable quality standards that are automatically validated before task completion.",
+    )
+    const_p.add_argument(
+        "action",
+        choices=["init", "validate", "show", "reload", "help"],
+        help="Action: init (create), validate (check), show (display), reload (reload), help (guide)",
+    )
+
     # context
     ctx_p = subparsers.add_parser("context", help="Get project context")
     ctx_p.add_argument("--output-limit", default="8k", choices=["4k", "8k", "16k", "32k", "128k"])
@@ -2403,6 +2620,8 @@ def main():
 
     if args.command == "init":
         cli.cmd_init(args.name, args.template, json_mode)
+    elif args.command == "constitution":
+        cli.cmd_constitution(args.action, json_mode)
     elif args.command == "context":
         cli.cmd_context(args.output_limit, json_mode)
     elif args.command == "list":

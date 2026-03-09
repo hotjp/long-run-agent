@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LRA - AI Agent 任务管理 + 质量保障 + 迭代引导系统</title>
-    <meta name="description" content="让 Agent 长时间自动化开发不再崩溃。基于 Anthropic 论文，解决上下文丢失、过度设计、过早完成等核心痛点。v4.1 新增迭代阶段引导。">
+    <meta name="description" content="让 Agent 长时间自动化开发不再崩溃。基于 Anthropic 论文，解决上下文丢失、过度设计、过早完成等核心痛点。v5.0 新增Constitution机制。">
     
     <!-- Open Graph -->
     <meta property="og:title" content="LRA - AI Agent 任务管理系统">
@@ -819,7 +819,7 @@
     <!-- Navigation -->
     <nav>
         <div class="nav-container">
-            <div class="logo">LRA v4.1</div>
+            <div class="logo">LRA v5.0</div>
             <ul class="nav-links">
                 <li><a href="#pain-points">痛点</a></li>
                 <li><a href="#theory">理论</a></li>
@@ -843,7 +843,7 @@
         <div class="container">
             <div class="hero-content fade-in-up">
                 <span class="badge badge-new">NEW</span>
-                <span class="badge badge-v4">v4.1</span>
+                <span class="badge badge-v4">v5.0</span>
                 <h1>
                     让 Agent 长时间自动化开发<br>
                     <span class="gradient-text">不再崩溃</span>
@@ -1064,7 +1064,7 @@
                         <li><strong>v3.3:</strong> 上下文重建协议（orientation）</li>
                         <li><strong>v3.4:</strong> 系统预检 + 项目分析</li>
                         <li><strong>v4.0:</strong> 完整质量保障系统</li>
-                        <li><strong>v4.1:</strong> 迭代阶段引导机制</li>
+                        <li><strong>v5.0:</strong> Constitution机制（规范驱动开发）</li>
                         <li><strong>超越:</strong> 多 Agent 协作 + 模板系统</li>
                     </ul>
                 </div>
@@ -1143,6 +1143,20 @@
                     </ul>
                 </div>
 
+                <!-- Constitution -->
+                <div class="feature-card" style="border-color: var(--accent-green);">
+                    <div class="feature-icon">🏛️</div>
+                    <h3 class="feature-title">Constitution 质量宪法 <span class="badge badge-new" style="font-size: 0.7rem;">v5.0</span></h3>
+                    <ul class="feature-list">
+                        <li><strong>规范驱动开发</strong>：定义项目不可协商原则</li>
+                        <li><strong>三层原则体系</strong>：NON_NEGOTIABLE、MANDATORY、CONFIGURABLE</li>
+                        <li><strong>自动验证</strong>：任务完成时强制检查</li>
+                        <li><strong>质量门禁</strong>：命令检查、字段验证、自定义门禁</li>
+                        <li><strong>AI无法偷懒</strong>：验证失败自动进入优化状态</li>
+                        <li><strong>强制执行</strong>：即使force参数也无法绕过NON_NEGOTIABLE</li>
+                    </ul>
+                </div>
+
                 <!-- Multi-Agent Collaboration -->
                 <div class="feature-card">
                     <div class="feature-icon">🤖</div>
@@ -1175,7 +1189,7 @@
         <div class="container">
             <div class="section-header">
                 <h2 class="section-title">🎯 Ralph Loop 任务级循环优化</h2>
-                <p class="section-subtitle">v4.1 核心特性：让 Agent 不再"偷懒"，每一步都扎实</p>
+                <p class="section-subtitle">v4.1+ 核心特性：让 Agent 不再"偷懒"，每一步都扎实</p>
             </div>
 
             <!-- Why Ralph -->
@@ -1501,7 +1515,7 @@
                         <span class="case-tag">实际案例</span>
                     </div>
                     <p style="color: var(--text-secondary);">
-                        LRA v4.0 + v4.1 使用 LRA 自身进行开发管理，实现了完整的自举。v4.1 的迭代阶段引导机制更是通过 Ralph Loop（任务级循环）机制实现自我验证。
+                        LRA v4.0 + v5.0 使用 LRA 自身进行开发管理，实现了完整的自举。v5.0 的Constitution机制更是通过强制验证实现了规范驱动开发，确保AI无法偷懒绕过质量检查。
                     </p>
                     <div class="case-stats">
                         <div class="case-stat">

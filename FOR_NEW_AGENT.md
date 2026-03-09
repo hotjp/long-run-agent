@@ -10,7 +10,57 @@
 
 **项目路径**: `/Users/kingj/.openclaw/workspace/long-run-agent`
 
-**当前版本**: v3.4.1 (v4.0 功能在 cli_extensions.py 中但未集成)
+**当前版本**: v5.0 (🆕 Constitution功能已集成)
+
+## 🆕 新功能：Constitution (v5.0)
+
+### 核心概念
+
+Constitution定义项目的**不可协商原则**和**质量标准**，在任务完成前**自动验证**。
+
+### 关键命令
+
+```bash
+lra constitution help       # 使用指南
+lra constitution init       # 初始化Constitution
+lra constitution show       # 查看配置
+lra constitution validate   # 验证配置
+```
+
+### 三层原则
+
+- 🔴 **NON_NEGOTIABLE** - 不可协商，必须通过
+- 🟡 **MANDATORY** - 强制，必需门禁通过
+- 🟢 **CONFIGURABLE** - 可配置，可启用/禁用
+
+### 强制执行
+
+⚠️ **重要**: Constitution在任务完成时自动验证，AI无法绕过！
+
+- 任务标记completed时自动验证
+- 验证失败自动进入optimizing状态
+- NON_NEGOTIABLE原则不能违反
+
+### 快速测试
+
+```bash
+# 1. 查看Constitution配置
+lra constitution show
+
+# 2. 创建任务
+lra create "测试任务"
+
+# 3. 尝试完成任务（会自动验证Constitution）
+lra set task_001 completed
+
+# 如果验证失败，会看到详细的失败原因和修复建议
+```
+
+### 相关文档
+
+- `docs/CONSTITUTION_ENFORCEMENT.md` - 强制执行机制
+- `docs/CONSTITUTION_DESIGN.md` - 详细设计
+- `CONSTITUTION_COMPLETE.md` - 功能完成报告
 
 ## 测试要求
 
@@ -31,9 +81,10 @@
 ✅ **查询命令** (6个): search, guide, status-guide, where, index, deps  
 ✅ **项目管理** (3个): analyze-project, system-check, recover  
 ✅ **任务执行** (3个): pause, checkpoint, resume  
+✅ **🆕 Constitution** (4个): constitution help, show, init, validate  
 ⚠️ **部分测试** (2个): template list, batch claim
 
-**测试覆盖率**: 74% (23/31)
+**测试覆盖率**: 80% (27/34)
 
 ## 🎯 测试场景设计
 

@@ -1,6 +1,6 @@
-# LRA - AI Agent Task Manager v4.1
+# LRA - AI Agent Task Manager v5.0
 
-**通用 AI Agent 任务管理框架 + 质量保障系统 + 迭代阶段引导**
+**规范驱动 + 任务管理 + 质量保障系统 + 迭代阶段引导**
 
 ## 核心特性
 
@@ -13,6 +13,7 @@
 - **🆕 Agent 自治初始化** (v3.3.0): 自动预检 + 增量处理 + 文档闭环
 - **✨ 质量保障系统** (v4.0.0): 验证机制 + 回归测试 + 代码质量检查
 - **🎯 迭代阶段引导** (v4.1.0): 7阶段渐进式优化 + 智能引导 + 安全检查
+- **🚀 Constitution机制** (v5.0.0): **规范驱动开发 + 质量门禁 + 不可协商原则**
 
 ## 安装
 
@@ -32,9 +33,12 @@ pip install long-run-agent[full]
 ## 快速开始
 
 ```bash
-# 初始化项目
+# 初始化项目（自动创建Constitution）
 cd /your/project
 lra init --name "My Project"
+
+# 🆕 查看Constitution配置
+lra constitution show
 
 # Agent 获取上下文
 lra context --output-limit 8k
@@ -46,18 +50,92 @@ lra orientation
 lra status
 ```
 
+## 🆕 Constitution功能 (v5.0)
+
+### 核心概念
+
+Constitution定义项目的**不可协商原则**和**质量标准**，在任务完成前自动验证，确保质量底线。
+
+### 快速上手
+
+```bash
+# 1. 查看Constitution使用指南
+lra constitution help
+
+# 2. 查看当前配置
+lra constitution show
+
+# 3. 验证配置有效性
+lra constitution validate
+
+# 4. 创建任务
+lra create "实现登录功能"
+
+# 5. 完成任务（自动验证Constitution）
+lra set task_001 completed
+# 如果验证失败，会自动进入optimizing状态并给出修复建议
+```
+
+### 三层原则体系
+
+| 原则类型 | 说明 | 强制性 |
+|---------|------|--------|
+| 🔴 NON_NEGOTIABLE | 不可协商原则 | 必须通过，无法绕过 |
+| 🟡 MANDATORY | 强制原则 | 必需门禁必须通过 |
+| 🟢 CONFIGURABLE | 可配置原则 | 可启用/禁用 |
+
+### 三种门禁类型
+
+- **command**: 执行shell命令检查（如：`pytest tests/`）
+- **field_exists**: 检查任务文件字段（如：`test_evidence`）
+- **custom**: 自定义检查函数
+
+### 强制执行机制
+
+⚠️ **重要**: Constitution在以下场景**自动验证**，AI无法绕过：
+
+1. **任务完成时** (`lra set task completed`) - 自动验证所有原则
+2. **Ralph Loop完成时** - 必须通过所有原则
+3. **强制完成时** - NON_NEGOTIABLE原则仍需通过
+
+**无法偷懒保证**: 即使使用`--force`参数，NON_NEGOTIABLE原则也必须通过！
+
+### 配置文件
+
+配置文件位置：`.long-run-agent/constitution.yaml`
+
+示例配置：
+```yaml
+core_principles:
+  - id: "no_broken_tests"
+    type: "NON_NEGOTIABLE"
+    name: "测试必须通过"
+    gates:
+      - type: "command"
+        command: "pytest tests/"
+```
+
+### 详细文档
+
+- `docs/CONSTITUTION_ENFORCEMENT.md` - 强制执行机制说明
+- `docs/CONSTITUTION_DESIGN.md` - 详细设计文档
+- `CONSTITUTION_COMPLETE.md` - 功能完成报告
+
 ## 命令参考
 
 ### 核心命令
 
 | 命令 | 用途 |
 |------|------|
-| `lra init --name <name>` | 初始化项目（默认 task 模板） |
+| `lra init --name <name>` | 初始化项目（自动创建Constitution） |
+| `lra constitution help` | 🆕 Constitution使用指南 |
+| `lra constitution show` | 🆕 查看Constitution配置 |
+| `lra constitution validate` | 🆕 验证Constitution有效性 |
 | `lra context [--output-limit Xk]` | 获取项目状态 + 可领取任务 |
 | `lra list [--status X] [--template X]` | 列出任务 |
 | `lra create <desc> --template <name>` | 创建任务 |
 | `lra show <id>` | 任务详情（包含迭代进度和阶段引导） |
-| `lra set <id> <status>` | 更新状态（触发质量检查，支持提前完成） |
+| `lra set <id> <status>` | 更新状态（自动Constitution验证） |
 | `lra set <id> force_next_stage` | 🆕 强制进入下一迭代阶段 |
 | `lra split <id> --plan '<json>'` | 拆分任务（模型提供方案） |
 
