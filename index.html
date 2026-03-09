@@ -822,6 +822,8 @@
             <div class="logo">LRA v4.1</div>
             <ul class="nav-links">
                 <li><a href="#pain-points">痛点</a></li>
+                <li><a href="#theory">理论</a></li>
+                <li><a href="#ralph-loop">Ralph Loop</a></li>
                 <li><a href="#features">功能</a></li>
                 <li><a href="#quick-start">快速开始</a></li>
                 <li><a href="#cases">案例</a></li>
@@ -1130,13 +1132,14 @@
                 <!-- Iteration Guidance -->
                 <div class="feature-card" style="border-color: var(--accent-purple);">
                     <div class="feature-icon">🎯</div>
-                    <h3 class="feature-title">迭代阶段引导 <span class="badge badge-new" style="font-size: 0.7rem;">NEW</span></h3>
+                    <h3 class="feature-title">Ralph 迭代引导 <span class="badge badge-new" style="font-size: 0.7rem;">v4.1</span></h3>
                     <ul class="feature-list">
-                        <li><strong>7阶段渐进优化</strong>：明确目标，逐步完善</li>
-                        <li><strong>智能引导</strong>：每阶段有重点和建议</li>
-                        <li><strong>提前完成</strong>：质量达标可提前退出</li>
-                        <li><strong>安全重构</strong>：重构前自动检查覆盖率</li>
-                        <li><strong>进度可视化</strong>：实时查看迭代进度</li>
+                        <li><strong>Ralph Loop</strong>：任务级循环优化机制</li>
+                        <li><strong>7阶段渐进优化</strong>：理解→实现→完善→优化→重构→测试→交付</li>
+                        <li><strong>智能引导</strong>：每阶段有明确重点、优先级检查项、忽略项</li>
+                        <li><strong>自动质量门禁</strong>：测试、Lint、验收标准按阶段触发</li>
+                        <li><strong>提前完成</strong>：质量达标可提前退出，不必走完7次</li>
+                        <li><strong>强制推进</strong>：卡住时可 force_next_stage 跳过</li>
                     </ul>
                 </div>
 
@@ -1162,6 +1165,242 @@
                         <li>19.5% 内存增长</li>
                         <li>优秀性能评级</li>
                     </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Ralph Loop Section -->
+    <section id="ralph-loop">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">🎯 Ralph Loop 任务级循环优化</h2>
+                <p class="section-subtitle">v4.1 核心特性：让 Agent 不再"偷懒"，每一步都扎实</p>
+            </div>
+
+            <!-- Why Ralph -->
+            <div style="margin-bottom: 3rem;">
+                <h3 style="text-align: center; margin-bottom: 1.5rem; font-size: 1.5rem;">为什么需要 Ralph Loop？</h3>
+                <div class="pain-points-grid">
+                    <div class="pain-point-card">
+                        <div class="pain-header">
+                            <div class="pain-number" style="background: linear-gradient(135deg, var(--warning), #f6ad55);">?</div>
+                            <h3 class="pain-title">Agent 容易过早宣布完成</h3>
+                        </div>
+                        <div class="pain-problem">
+                            "我认为功能已经完成了" —— 但实际上还有很多边界情况没处理、测试没通过
+                        </div>
+                        <div class="pain-solution">
+                            Ralph Loop 强制 Agent 经历7个迭代阶段<br>
+                            每阶段有明确的质量门禁<br>
+                            只有全部通过才能进入下一阶段
+                        </div>
+                    </div>
+                    <div class="pain-point-card">
+                        <div class="pain-header">
+                            <div class="pain-number" style="background: linear-gradient(135deg, var(--warning), #f6ad55);">?</div>
+                            <h3 class="pain-title">缺乏明确的优化方向</h3>
+                        </div>
+                        <div class="pain-problem">
+                            "现在应该做什么？" —— Agent 在不同迭代阶段做同样的事情
+                        </div>
+                        <div class="pain-solution">
+                            每阶段有明确的重点和优先级<br>
+                            第1轮：理解目标 vs 第5轮：代码重构<br>
+                            不会在错误的方向上浪费时间
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 7 Stages -->
+            <div style="margin-bottom: 3rem;">
+                <h3 style="text-align: center; margin-bottom: 2rem; font-size: 1.5rem;">7 阶段渐进优化路径</h3>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem;">
+                    <!-- Stage 1 -->
+                    <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.5rem; position: relative;">
+                        <div style="position: absolute; top: -10px; left: 20px; background: var(--accent-green); color: var(--bg-primary); padding: 0.25rem 0.75rem; border-radius: 12px; font-weight: 700; font-size: 0.85rem;">阶段 1</div>
+                        <h4 style="margin-top: 0.5rem; margin-bottom: 0.75rem; color: var(--accent-green);">理解与规划</h4>
+                        <ul style="color: var(--text-secondary); font-size: 0.9rem; padding-left: 1.25rem;">
+                            <li>理解任务目标</li>
+                            <li>明确验收标准</li>
+                            <li>制定执行计划</li>
+                        </ul>
+                        <div style="margin-top: 1rem; padding: 0.75rem; background: rgba(0,255,136,0.1); border-radius: 6px; font-size: 0.85rem; color: var(--accent-green);">
+                            <i class="fas fa-check"></i> 质量门禁：目标理解
+                        </div>
+                    </div>
+                    <!-- Stage 2 -->
+                    <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.5rem; position: relative;">
+                        <div style="position: absolute; top: -10px; left: 20px; background: var(--accent-cyan); color: var(--bg-primary); padding: 0.25rem 0.75rem; border-radius: 12px; font-weight: 700; font-size: 0.85rem;">阶段 2</div>
+                        <h4 style="margin-top: 0.5rem; margin-bottom: 0.75rem; color: var(--accent-cyan);">基础实现</h4>
+                        <ul style="color: var(--text-secondary); font-size: 0.9rem; padding-left: 1.25rem;">
+                            <li>完成核心功能</li>
+                            <li>确保基本可运行</li>
+                            <li>验证正确性</li>
+                        </ul>
+                        <div style="margin-top: 1rem; padding: 0.75rem; background: rgba(0,212,255,0.1); border-radius: 6px; font-size: 0.85rem; color: var(--accent-cyan);">
+                            <i class="fas fa-check"></i> 质量门禁：基本功能
+                        </div>
+                    </div>
+                    <!-- Stage 3 -->
+                    <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.5rem; position: relative;">
+                        <div style="position: absolute; top: -10px; left: 20px; background: var(--accent-purple); color: white; padding: 0.25rem 0.75rem; border-radius: 12px; font-weight: 700; font-size: 0.85rem;">阶段 3</div>
+                        <h4 style="margin-top: 0.5rem; margin-bottom: 0.75rem; color: var(--accent-purple);">功能完善</h4>
+                        <ul style="color: var(--text-secondary); font-size: 0.9rem; padding-left: 1.25rem;">
+                            <li>处理边界情况</li>
+                            <li>完善错误处理</li>
+                            <li>补充文档注释</li>
+                        </ul>
+                        <div style="margin-top: 1rem; padding: 0.75rem; background: rgba(102,126,234,0.1); border-radius: 6px; font-size: 0.85rem; color: var(--accent-purple);">
+                            <i class="fas fa-check"></i> 质量门禁：功能完整
+                        </div>
+                    </div>
+                    <!-- Stage 4 -->
+                    <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.5rem; position: relative;">
+                        <div style="position: absolute; top: -10px; left: 20px; background: var(--accent-pink); color: white; padding: 0.25rem 0.75rem; border-radius: 12px; font-weight: 700; font-size: 0.85rem;">阶段 4</div>
+                        <h4 style="margin-top: 0.5rem; margin-bottom: 0.75rem; color: var(--accent-pink);">质量提升</h4>
+                        <ul style="color: var(--text-secondary); font-size: 0.9rem; padding-left: 1.25rem;">
+                            <li>修复 lint 警告</li>
+                            <li>改善代码结构</li>
+                            <li>增加测试覆盖</li>
+                        </ul>
+                        <div style="margin-top: 1rem; padding: 0.75rem; background: rgba(237,100,166,0.1); border-radius: 6px; font-size: 0.85rem; color: var(--accent-pink);">
+                            <i class="fas fa-check"></i> 质量门禁：Lint + 测试
+                        </div>
+                    </div>
+                    <!-- Stage 5 -->
+                    <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.5rem; position: relative;">
+                        <div style="position: absolute; top: -10px; left: 20px; background: var(--warning); color: var(--bg-primary); padding: 0.25rem 0.75rem; border-radius: 12px; font-weight: 700; font-size: 0.85rem;">阶段 5</div>
+                        <h4 style="margin-top: 0.5rem; margin-bottom: 0.75rem; color: var(--warning);">优化改进</h4>
+                        <ul style="color: var(--text-secondary); font-size: 0.9rem; padding-left: 1.25rem;">
+                            <li>性能优化</li>
+                            <li>算法改进</li>
+                            <li>资源利用</li>
+                        </ul>
+                        <div style="margin-top: 1rem; padding: 0.75rem; background: rgba(251,211,141,0.1); border-radius: 6px; font-size: 0.85rem; color: var(--warning);">
+                            <i class="fas fa-check"></i> 质量门禁：性能检查
+                        </div>
+                    </div>
+                    <!-- Stage 6 -->
+                    <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.5rem; position: relative;">
+                        <div style="position: absolute; top: -10px; left: 20px; background: #4299e1; color: white; padding: 0.25rem 0.75rem; border-radius: 12px; font-weight: 700; font-size: 0.85rem;">阶段 6</div>
+                        <h4 style="margin-top: 0.5rem; margin-bottom: 0.75rem; color: #4299e1;">验证测试</h4>
+                        <ul style="color: var(--text-secondary); font-size: 0.9rem; padding-left: 1.25rem;">
+                            <li>完整测试套件</li>
+                            <li>端到端验证</li>
+                            <li>回归测试</li>
+                        </ul>
+                        <div style="margin-top: 1rem; padding: 0.75rem; background: rgba(66,153,225,0.1); border-radius: 6px; font-size: 0.85rem; color: #4299e1;">
+                            <i class="fas fa-check"></i> 质量门禁：全部测试
+                        </div>
+                    </div>
+                    <!-- Stage 7 -->
+                    <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.5rem; position: relative; border-color: var(--accent-green);">
+                        <div style="position: absolute; top: -10px; left: 20px; background: var(--accent-green); color: var(--bg-primary); padding: 0.25rem 0.75rem; border-radius: 12px; font-weight: 700; font-size: 0.85rem;">阶段 7</div>
+                        <h4 style="margin-top: 0.5rem; margin-bottom: 0.75rem; color: var(--accent-green);">交付准备</h4>
+                        <ul style="color: var(--text-secondary); font-size: 0.9rem; padding-left: 1.25rem;">
+                            <li>最终验收检查</li>
+                            <li>文档完整性</li>
+                            <li>部署准备</li>
+                        </ul>
+                        <div style="margin-top: 1rem; padding: 0.75rem; background: rgba(0,255,136,0.15); border-radius: 6px; font-size: 0.85rem; color: var(--accent-green); border: 1px solid var(--accent-green);">
+                            <i class="fas fa-flag-checkered"></i> 质量门禁：验收标准
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Ralph Demo -->
+            <div style="background: var(--bg-tertiary); border-radius: 12px; padding: 2rem; margin-bottom: 3rem;">
+                <h3 style="text-align: center; margin-bottom: 1.5rem; font-size: 1.5rem;">Ralph Loop 工作演示</h3>
+                <div class="terminal-window" style="max-width: 700px; margin: 0 auto;">
+                    <div class="terminal-header">
+                        <div class="terminal-dot red"></div>
+                        <div class="terminal-dot yellow"></div>
+                        <div class="terminal-dot green"></div>
+                    </div>
+                    <div class="terminal-body">
+                        <div class="terminal-line">
+                            <span class="terminal-prompt">$</span>
+                            <span class="terminal-command">lra set task_001 completed</span>
+                        </div>
+                        <div class="terminal-line">
+                            <span class="terminal-output">🔍 自动运行质量检查...</span>
+                        </div>
+                        <div class="terminal-line">
+                            <span class="terminal-output">❌ 质量检查未通过</span>
+                        </div>
+                        <div class="terminal-line">
+                            <span class="terminal-output">📊 迭代进度: 1/7</span>
+                        </div>
+                        <div class="terminal-line">
+                            <span class="terminal-output">━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
+                        </div>
+                        <div class="terminal-line">
+                            <span class="terminal-output">🎯 当前阶段: 基础实现</span>
+                        </div>
+                        <div class="terminal-line">
+                            <span class="terminal-output">📌 本次重点: 完成核心功能，确保可运行</span>
+                        </div>
+                        <div class="terminal-line">
+                            <span class="terminal-output">❌ 失败原因: test_login_failed</span>
+                        </div>
+                        <div class="terminal-line">
+                            <span class="terminal-output">💡 建议: 检查密码验证逻辑，补充单元测试</span>
+                        </div>
+                        <div class="terminal-line">
+                            <span class="terminal-prompt">$</span>
+                            <span class="terminal-command"># 修复后再次提交</span>
+                        </div>
+                        <div class="terminal-line">
+                            <span class="terminal-prompt">$</span>
+                            <span class="terminal-command">lra set task_001 completed</span>
+                        </div>
+                        <div class="terminal-line">
+                            <span class="terminal-success">✅ 质量检查通过！得分: 85/100</span>
+                        </div>
+                        <div class="terminal-line">
+                            <span class="terminal-success">🎉 任务可提前完成（迭代 2/7）</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Template Comparison -->
+            <div>
+                <h3 style="text-align: center; margin-bottom: 1.5rem; font-size: 1.5rem;">不同模板的迭代路径</h3>
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse; background: var(--bg-card); border-radius: 12px; overflow: hidden;">
+                        <thead>
+                            <tr style="background: var(--bg-tertiary);">
+                                <th style="padding: 1rem; text-align: left; border-bottom: 2px solid var(--accent-green);">模板</th>
+                                <th style="padding: 1rem; text-align: left; border-bottom: 2px solid var(--accent-green);">7阶段路径</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr style="border-bottom: 1px solid var(--border-color);">
+                                <td style="padding: 1rem;"><span class="highlight">code-module</span></td>
+                                <td style="padding: 1rem; color: var(--text-secondary);">理解需求 → 基础功能 → 功能完善 → 质量提升 → 优化改进 → 全面测试 → 交付准备</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid var(--border-color);">
+                                <td style="padding: 1rem;"><span class="highlight-cyan">novel-chapter</span></td>
+                                <td style="padding: 1rem; color: var(--text-secondary);">理解大纲 → 完成初稿 → 情节完善 → 人物塑造 → 语言润色 → 逻辑检查 → 最终定稿</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid var(--border-color);">
+                                <td style="padding: 1rem;"><span class="highlight" style="color: var(--accent-purple);">data-pipeline</span></td>
+                                <td style="padding: 1rem; color: var(--text-secondary);">理解需求 → 数据可用 → 数据质量 → 功能完整 → 性能优化 → 可视化 → 交付验证</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid var(--border-color);">
+                                <td style="padding: 1rem;"><span class="highlight" style="color: var(--accent-pink);">doc-update</span></td>
+                                <td style="padding: 1rem; color: var(--text-secondary);">理解需求 → 内容收集 → 结构设计 → 内容编写 → 格式优化 → 审校修改 → 最终发布</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 1rem;"><span class="highlight">task</span></td>
+                                <td style="padding: 1rem; color: var(--text-secondary);">理解规划 → 基础实现 → 功能完善 → 质量提升 → 优化改进 → 验证测试 → 交付准备</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
