@@ -1189,6 +1189,24 @@ class LRACLI:
         print("   - requirements: 具体需求描述")
         print("   - acceptance: 验收标准（每行一个条件）")
         print("   - deliverables: 交付物文件路径")
+
+        # 添加示例
+        print("\n📋 填写示例:")
+        print("""
+## requirements
+实现用户注册API，支持邮箱和手机号注册，包含验证码功能
+
+## acceptance
+- POST /api/register 返回200和用户信息
+- 验证码5分钟内有效
+- 重复注册返回友好错误提示
+
+## deliverables
+- src/api/auth/register.py
+- src/utils/sms.py
+- tests/test_register.py
+""")
+
         print("\n📄 子任务详情文件:")
         for task in tasks:
             task_id = task.get("id", "")
