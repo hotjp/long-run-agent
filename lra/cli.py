@@ -1134,7 +1134,18 @@ class LRACLI:
             # 生成简单的子任务计划
             split_plan = [{"desc": f"子任务{i}", "output_req": "4k"} for i in range(1, count + 1)]
             success, result = self.task_manager.split_task(task_id, split_plan)
-            output(result if success else {"error": "split_failed", "detail": result}, json_mode)
+
+            if success:
+                # 输出 JSON 结果
+                output(
+                    result if success else {"error": "split_failed", "detail": result}, json_mode
+                )
+
+                # 非 JSON 模式时显示建议
+                if not json_mode and result.get("tasks"):
+                    self._print_split_hints(result["tasks"])
+            else:
+                output({"error": "split_failed", "detail": result}, json_mode)
             return
 
         # 原有的 plan 逻辑
@@ -1161,7 +1172,30 @@ class LRACLI:
             return
 
         success, result = self.task_manager.split_task(task_id, split_plan)
-        output(result if success else {"error": "split_failed", "detail": result}, json_mode)
+
+        if success:
+            output(result if success else {"error": "split_failed", "detail": result}, json_mode)
+            if not json_mode and result.get("tasks"):
+                self._print_split_hints(result["tasks"])
+        else:
+            output({"error": "split_failed", "detail": result}, json_mode)
+
+    def _print_split_hints(self, tasks: list):
+        """打印子任务详情填充提示"""
+        print("\n" + "=" * 50)
+        print("💡 建议下一步: 填充子任务详情")
+        print("=" * 50)
+        print("\n📝 请为每个子任务编辑详情文件，填充以下字段:")
+        print("   - requirements: 具体需求描述")
+        print("   - acceptance: 验收标准（每行一个条件）")
+        print("   - deliverables: 交付物文件路径")
+        print("\n📄 子任务详情文件:")
+        for task in tasks:
+            task_id = task.get("id", "")
+            task_file = task.get("task_file", f"tasks/{task_id}.md")
+            print(f"   • {task_id}: {task_file}")
+        print("\n💡 提示: 使用 lra show <task_id> 查看任务详情")
+        print("=" * 50)
 
     def cmd_claim(self, task_id: str, json_mode: bool = False):
         can_claim, reason = self.locks_manager.can_claim(task_id)
