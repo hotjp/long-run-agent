@@ -6,11 +6,16 @@ LRA v4.0 配置模块
 
 import os
 import json
-import fcntl
+import sys
 import subprocess
 import time
 from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime
+
+if sys.platform != "win32":
+    import fcntl
+else:
+    fcntl = None
 
 CURRENT_VERSION = "5.0.0"
 SCHEMA_VERSION = "2026-02-25"
@@ -149,7 +154,8 @@ class FileLock:
         os.makedirs(os.path.dirname(self.lock_path) or ".", exist_ok=True)
         self.lock_file = open(self.lock_path, "w")
         try:
-            fcntl.flock(self.lock_file.fileno(), fcntl.LOCK_EX)
+            if fcntl is not None:
+                fcntl.flock(self.lock_file.fileno(), fcntl.LOCK_EX)
             return self
         except Exception as e:
             self.lock_file.close()
@@ -157,7 +163,8 @@ class FileLock:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self.lock_file:
-            fcntl.flock(self.lock_file.fileno(), fcntl.LOCK_UN)
+            if fcntl is not None:
+                fcntl.flock(self.lock_file.fileno(), fcntl.LOCK_UN)
             self.lock_file.close()
             try:
                 os.unlink(self.lock_path)
