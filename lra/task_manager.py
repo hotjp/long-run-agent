@@ -750,12 +750,20 @@ class TaskManager:
             if isinstance(item, str):
                 desc = item
                 output_req = "8k"
+                details = {}
             elif isinstance(item, dict):
                 desc = item.get("desc", f"Part {i + 1}")
                 output_req = item.get("output_req", "8k")
+                details = {
+                    "requirements": item.get("requirements", ""),
+                    "acceptance": item.get("acceptance", []),
+                    "deliverables": item.get("deliverables", []),
+                }
+                details = {k: v for k, v in details.items() if v}
             else:
                 desc = f"Part {i + 1}"
                 output_req = "8k"
+                details = {}
 
             success, result = self.create(
                 description=desc,
@@ -763,6 +771,7 @@ class TaskManager:
                 priority=parent.get("priority", "P1"),
                 parent_id=task_id,
                 output_req=output_req,
+                variables=details if details else None,
             )
             if success:
                 created.append(result)

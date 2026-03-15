@@ -1120,36 +1120,97 @@ class LRACLI:
         all_states = self.template_manager.get_states_for_template(template)
         return [s for s in all_states if not transitions.get(s)]
 
-    def cmd_split(self, task_id: str, count: int = None, plan: str = None, json_mode: bool = False):
+    def _check_task_filled(self, task_id: str) -> tuple:
+        """检查任务文件是否已填充业务细节"""
+        task = self.task_manager.get(task_id)
+        if not task:
+            return False, []
+
+        task_file = task.get("task_file")
+        if not task_file:
+            return False, []
+
+        task_dir = Config.get_tasks_dir()
+        task_path = os.path.join(task_dir, f"{task_id}.md")
+
+        if not os.path.exists(task_path):
+            return False, []
+
+        try:
+            with open(task_path, "r", encoding="utf-8") as f:
+                content = f.read()
+        except:
+            return False, []
+
+        missing = []
+        if "## 需求" in content or "## requirements" in content.lower():
+            if "<!-- 在此填写具体需求描述 -->" in content or "<!-- 请在" in content:
+                missing.append("requirements")
+        else:
+            missing.append("requirements")
+
+        if "## 验收标准" in content or "## acceptance" in content.lower():
+            if "<!-- 在此填写验收标准" in content or "<!-- 请在" in content:
+                missing.append("acceptance")
+        else:
+            missing.append("acceptance")
+
+        if "## 交付物" in content or "## deliverables" in content.lower():
+            if "<!-- 在此填写交付物" in content or "<!-- 请在" in content:
+                missing.append("deliverables")
+        else:
+            missing.append("deliverables")
+
+        return len(missing) == 0, missing
+
+    def cmd_split(
+        self,
+        task_id: str,
+        count: int = None,
+        plan: str = None,
+        plan_file: str = None,
+        json_mode: bool = False,
+    ):
         if not self._check_project():
             output({"error": "not_initialized"}, json_mode)
             return
 
-        # 如果提供了 count，自动生成计划
-        if count and not plan:
-            if count < 2:
-                output({"error": "count_must_be_at_least_2"}, json_mode)
-                return
-
-            # 生成简单的子任务计划
-            split_plan = [{"desc": f"子任务{i}", "output_req": "4k"} for i in range(1, count + 1)]
-            success, result = self.task_manager.split_task(task_id, split_plan)
-
-            if success:
-                # 输出 JSON 结果
-                output(
-                    result if success else {"error": "split_failed", "detail": result}, json_mode
-                )
-
-                # 非 JSON 模式时显示建议
-                if not json_mode and result.get("tasks"):
-                    self._print_split_hints(result["tasks"])
-            else:
-                output({"error": "split_failed", "detail": result}, json_mode)
+        # 如果提供了 count，直接报错（不再支持）
+        if count:
+            output(
+                {
+                    "error": "count_not_supported",
+                    "message": "--count is deprecated. Please use --plan or --plan-file with detailed specifications.",
+                    "hint": 'Example: lra split task_001 --plan \'[{"desc":"Subtask 1","requirements":"...","acceptance":["..."],"deliverables":["..."]}]\'',
+                },
+                json_mode,
+            )
             return
 
-        # 原有的 plan 逻辑
-        if not plan:
+        # 如果提供了 plan_file，读取文件内容
+        if plan_file:
+            if not os.path.exists(plan_file):
+                output({"error": "plan_file_not_found", "file": plan_file}, json_mode)
+                return
+            try:
+                with open(plan_file, "r", encoding="utf-8") as f:
+                    plan_content = f.read()
+                split_plan = json.loads(plan_content)
+            except json.JSONDecodeError as e:
+                output({"error": "invalid_json_in_file", "detail": str(e)}, json_mode)
+                return
+            except Exception as e:
+                output({"error": "read_plan_file_failed", "detail": str(e)}, json_mode)
+                return
+        elif plan:
+            # 原有的 plan 逻辑
+            try:
+                split_plan = json.loads(plan)
+            except:
+                output({"error": "invalid_json_plan"}, json_mode)
+                return
+        else:
+            # 没有提供 plan，显示任务信息
             task = self.task_manager.get(task_id)
             if task:
                 output(
@@ -1157,18 +1218,12 @@ class LRACLI:
                         "task_id": task_id,
                         "desc": task.get("description", ""),
                         "output_req": task.get("output_req", "8k"),
-                        "hint": "Use --count N for quick split or --plan for detailed control",
+                        "hint": "Use --plan or --plan-file to provide detailed specifications",
                     },
                     json_mode,
                 )
             else:
                 output({"error": "not_found"}, json_mode)
-            return
-
-        try:
-            split_plan = json.loads(plan)
-        except:
-            output({"error": "invalid_json_plan"}, json_mode)
             return
 
         success, result = self.task_manager.split_task(task_id, split_plan)
@@ -1221,6 +1276,49 @@ class LRACLI:
             output({"error": "cannot_claim", "reason": reason}, json_mode)
             return
 
+        filled, missing = self._check_task_filled(task_id)
+        if not filled:
+            task = self.task_manager.get(task_id)
+            task_file = (
+                task.get("task_file", f"tasks/{task_id}.md") if task else f"tasks/{task_id}.md"
+            )
+
+            if json_mode:
+                output(
+                    {
+                        "error": "task_not_filled",
+                        "task_id": task_id,
+                        "missing": missing,
+                        "task_file": task_file,
+                        "hint": "请先填充任务详情",
+                    },
+                    json_mode,
+                )
+                return
+
+            print("⚠️ 任务尚未填充详情，无法认领\n")
+            print(f"📝 请先编辑任务文件补充以下内容:\n")
+            print(f"File: {task_file}\n")
+
+            if "requirements" in missing:
+                print("## requirements")
+                print("[在此填写具体需求...]")
+                print()
+
+            if "acceptance" in missing:
+                print("## acceptance")
+                print("- [验收标准1]")
+                print("- [验收标准2]")
+                print()
+
+            if "deliverables" in missing:
+                print("## deliverables")
+                print("- [交付物文件路径]")
+                print()
+
+            print("💡 提示: 填写完成后再次执行 lra claim 即可")
+            return
+
         success, result = self.locks_manager.claim(task_id)
         output(result if success else {"error": "claim_failed", "detail": result}, json_mode)
 
@@ -1271,20 +1369,32 @@ class LRACLI:
             output(result, json_mode)
 
         elif args.record_cmd == "list":
-            features = self.records_manager.list_features()
-            if json_mode:
-                output({"features": features, "count": len(features)}, json_mode)
-            else:
-                if features:
-                    print("Features with records:")
-                    for f in features:
-                        brief = self.records_manager.get_brief(f)
-                        if brief:
-                            print(
-                                f"  - {f}: {brief.get('commits', 0)} commits, {len(brief.get('files', []))} files"
-                            )
+            if args.feature_id:
+                brief = self.records_manager.get_brief(args.feature_id)
+                if brief:
+                    if json_mode:
+                        output({"feature_id": args.feature_id, "brief": brief}, json_mode)
+                    else:
+                        print(f"Feature: {args.feature_id}")
+                        print(f"  Commits: {brief.get('commits', 0)}")
+                        print(f"  Files: {len(brief.get('files', []))}")
                 else:
-                    print("No features with records yet.")
+                    output({"error": f"Feature '{args.feature_id}' not found"}, json_mode)
+            else:
+                features = self.records_manager.list_features()
+                if json_mode:
+                    output({"features": features, "count": len(features)}, json_mode)
+                else:
+                    if features:
+                        print("Features with records:")
+                        for f in features:
+                            brief = self.records_manager.get_brief(f)
+                            if brief:
+                                print(
+                                    f"  - {f}: {brief.get('commits', 0)} commits, {len(brief.get('files', []))} files"
+                                )
+                    else:
+                        print("No features with records yet.")
 
         elif args.record_cmd == "show":
             result = self.records_manager.get(args.feature_id, args.limit)
@@ -2404,19 +2514,40 @@ def main():
     split_p = subparsers.add_parser(
         "split",
         help="Split task into subtasks",
-        description="Split a task into multiple subtasks. Use --count for quick split or --plan for detailed control.",
+        description="""Split a task into subtasks. Agent should use --plan or --plan-file to provide
+detailed subtask specifications including requirements, acceptance criteria, and deliverables.
+
+Recommended workflow:
+  1. Read parent task file: lra show <parent_id>
+  2. Create plan file with detailed specs
+  3. Split with: lra split <parent_id> --plan-file /path/to/plan.json
+""",
     )
     split_p.add_argument("task_id", help="Parent task ID to split")
     split_p.add_argument(
         "--count",
         type=int,
         default=None,
-        help="Number of subtasks to create (quick mode). Subtasks will be named 'Subtask 1', 'Subtask 2', etc.",
+        help="(Deprecated) Quick mode: create empty subtasks with generic names",
     )
     split_p.add_argument(
         "--plan",
         default=None,
-        help='JSON array for detailed control: \'["task1","task2"]\' or \'[{"desc":"task","output_req":"8k"}]\'',
+        help="""JSON array of detailed subtask specs. Format:
+[
+  {
+    "desc": "子任务描述",
+    "output_req": "4k",
+    "requirements": "具体需求描述",
+    "acceptance": ["验收标准1", "验收标准2"],
+    "deliverables": ["交付物1", "交付物2"]
+  }
+]""",
+    )
+    split_p.add_argument(
+        "--plan-file",
+        default=None,
+        help="Read plan from file (recommended for detailed specs). Example: --plan-file .long-run-agent/split_plan.json",
     )
 
     # claim
@@ -2454,7 +2585,8 @@ def main():
     record_add_p.add_argument("--auto", action="store_true")
 
     # record list
-    record_sub.add_parser("list", help="List all features")
+    record_list_p = record_sub.add_parser("list", help="List all features")
+    record_list_p.add_argument("feature_id", nargs="?", default=None)
 
     # record show
     record_show_p = record_sub.add_parser("show", help="Show feature records")
@@ -2504,8 +2636,8 @@ def main():
 
     # batch set
     batch_set_p = batch_sub.add_parser("set", help="Batch set status")
-    batch_set_p.add_argument("status")
     batch_set_p.add_argument("task_ids", nargs="+")
+    batch_set_p.add_argument("status")
     batch_set_p.add_argument(
         "--auto-lock",
         action="store_true",
@@ -2696,7 +2828,7 @@ def main():
     elif args.command == "set":
         cli.cmd_set(args.task_id, args.status, json_mode)
     elif args.command == "split":
-        cli.cmd_split(args.task_id, args.count, args.plan, json_mode)
+        cli.cmd_split(args.task_id, args.count, args.plan, args.plan_file, json_mode)
     elif args.command == "claim":
         cli.cmd_claim(args.task_id, json_mode)
     elif args.command == "publish":

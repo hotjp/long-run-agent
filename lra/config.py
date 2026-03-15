@@ -139,6 +139,32 @@ class Config:
         for d in dirs:
             os.makedirs(d, exist_ok=True)
 
+        cls._copy_default_templates()
+
+    @classmethod
+    def _copy_default_templates(cls) -> None:
+        """从全局模板目录复制默认模板到项目目录"""
+        import shutil
+
+        project_templates = cls.get_templates_dir()
+
+        # 获取全局模板目录（lra包所在目录的上级/.long-run-agent/templates）
+        lra_dir = os.path.dirname(os.path.abspath(__file__))
+        global_templates = os.path.join(lra_dir, "..", ".long-run-agent", "templates")
+        global_templates = os.path.normpath(global_templates)
+
+        if not os.path.exists(global_templates):
+            return
+
+        # 复制全局模板到项目目录
+        for f in os.listdir(global_templates):
+            if f.endswith(".yaml"):
+                src = os.path.join(global_templates, f)
+                dst = os.path.join(project_templates, f)
+                # 只复制不存在的或全局模板更新的文件
+                if not os.path.exists(dst) or os.path.getmtime(src) > os.path.getmtime(dst):
+                    shutil.copy2(src, dst)
+
 
 class FileLock:
     def __init__(self, lock_path: str):
