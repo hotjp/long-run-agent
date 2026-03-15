@@ -6,16 +6,11 @@ LRA v4.0 配置模块
 
 import os
 import json
-import sys
 import subprocess
 import time
 from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime
-
-if sys.platform != "win32":
-    import fcntl
-else:
-    fcntl = None
+from filelock import FileLock as _FileLock
 
 CURRENT_VERSION = "5.0.0"
 SCHEMA_VERSION = "2026-02-25"
@@ -147,27 +142,20 @@ class Config:
 
 class FileLock:
     def __init__(self, lock_path: str):
-        self.lock_path = lock_path
-        self.lock_file = None
+        self._lock_path = lock_path + ".lock"
+        self._filelock = None
 
     def __enter__(self):
-        os.makedirs(os.path.dirname(self.lock_path) or ".", exist_ok=True)
-        self.lock_file = open(self.lock_path, "w")
-        try:
-            if fcntl is not None:
-                fcntl.flock(self.lock_file.fileno(), fcntl.LOCK_EX)
-            return self
-        except Exception as e:
-            self.lock_file.close()
-            raise e
+        os.makedirs(os.path.dirname(self._lock_path) or ".", exist_ok=True)
+        self._filelock = _FileLock(self._lock_path)
+        self._filelock.acquire()
+        return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if self.lock_file:
-            if fcntl is not None:
-                fcntl.flock(self.lock_file.fileno(), fcntl.LOCK_UN)
-            self.lock_file.close()
+        if self._filelock:
+            self._filelock.release()
             try:
-                os.unlink(self.lock_path)
+                os.unlink(self._lock_path)
             except:
                 pass
 

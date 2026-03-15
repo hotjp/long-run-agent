@@ -15,6 +15,7 @@ authors = [
 dependencies = [
     "jinja2>=3.0",
     "pyyaml>=6.0",
+    "filelock>=3.9.0",
 ]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
