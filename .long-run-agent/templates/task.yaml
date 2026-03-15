@@ -1,0 +1,276 @@
+acceptance: []
+description: 通用任务模板
+ralph:
+  enabled: true
+  max_iterations: 7
+  iteration_stages:
+    - iteration: 1
+      name: "理解与规划"
+      focus:
+        - "理解目标"
+        - "明确标准"
+        - "制定计划"
+      priority_checks:
+        - "goal_understood"
+        - "criteria_defined"
+        - "plan_created"
+      ignore_checks:
+        - "implementation_details"
+      suggestion: |
+        🎯 **第1轮迭代：理解与规划**
+        
+        **目标**: 充分理解任务，制定清晰计划
+        
+        **重点关注**:
+        - 理解任务目标和背景
+        - 明确验收标准
+        - 分析需求和约束
+        - 制定执行计划
+        
+        **可以忽略**:
+        - 具体实现细节
+        
+        💡 提示：好的开始是成功的一半，充分理解任务再动手
+        
+    - iteration: 2
+      name: "基础实现"
+      focus:
+        - "完成核心"
+        - "确保可用"
+        - "验证正确"
+      priority_checks:
+        - "core_functional"
+        - "basic_usable"
+        - "correctness_verified"
+      ignore_checks:
+        - "optimization"
+        - "edge_cases"
+      suggestion: |
+        🔧 **第2轮迭代：基础实现**
+        
+        **目标**: 完成核心功能，确保基本可用
+        
+        **重点关注**:
+        - 实现核心功能
+        - 确保功能可运行
+        - 验证基本正确性
+        - 完成最小可行方案
+        
+        **可以忽略**:
+        - 性能优化
+        - 边界情况处理
+        
+        💡 提示：先让核心功能跑通，不要过度设计
+        
+    - iteration: 3
+      name: "功能完善"
+      focus:
+        - "补充遗漏"
+        - "处理边界"
+        - "提高完整"
+      priority_checks:
+        - "features_complete"
+        - "edge_cases_handled"
+        - "completeness"
+      ignore_checks:
+        - "code_quality"
+      suggestion: |
+        ✅ **第3轮迭代：功能完善**
+        
+        **目标**: 补充遗漏功能，提高完整性
+        
+        **重点关注**:
+        - 补充遗漏的功能点
+        - 处理边界情况
+        - 完善错误处理
+        - 提高功能完整性
+        
+        **可以忽略**:
+        - 代码质量优化
+        
+        💡 提示：确保功能完整，处理各种情况
+        
+    - iteration: 4
+      name: "质量提升"
+      focus:
+        - "优化实现"
+        - "提高标准"
+        - "消除问题"
+      priority_checks:
+        - "quality_improved"
+        - "issues_resolved"
+      ignore_checks:
+        - "major_refactoring"
+      suggestion: |
+        🎨 **第4轮迭代：质量提升**
+        
+        **目标**: 提升质量，消除问题
+        
+        **重点关注**:
+        - 优化实现方式
+        - 提高标准和要求
+        - 消除已知问题
+        - 改善代码质量
+        
+        **可以忽略**:
+        - 大规模重构
+        
+        💡 提示：提升质量是持续改进的过程
+        
+    - iteration: 5
+      name: "优化改进"
+      focus:
+        - "性能优化"
+        - "结构优化"
+        - "细节完善"
+      priority_checks:
+        - "performance_optimized"
+        - "structure_improved"
+        - "details_polished"
+      safety_checks:
+        - "优化前确保功能正常"
+        - "优化后验证功能不变"
+        - "保留原有测试"
+      suggestion: |
+        ⚡ **第5轮迭代：优化改进**
+        
+        **目标**: 优化性能和结构，完善细节
+        
+        **重点关注**:
+        - 性能优化
+        - 结构优化
+        - 细节完善
+        - 提升用户体验
+        
+        ⚠️ **安全检查**:
+        - 优化前确保功能正常
+        - 优化后验证功能不变
+        - 保留原有测试
+        
+        💡 提示：优化是锦上添花，不要影响核心功能
+        
+    - iteration: 6
+      name: "验证测试"
+      focus:
+        - "全面测试"
+        - "验证可靠"
+        - "确认完整"
+      priority_checks:
+        - "fully_tested"
+        - "reliability_verified"
+        - "completeness_confirmed"
+      suggestion: |
+        🧪 **第6轮迭代：验证测试**
+        
+        **目标**: 全面测试，确保可靠
+        
+        **重点关注**:
+        - 执行全面测试
+        - 验证功能可靠性
+        - 确认需求完整性
+        - 进行回归测试
+        
+        **测试覆盖**:
+        - 功能测试
+        - 边界测试
+        - 异常测试
+        - 回归测试
+        
+        💡 提示：充分的测试是质量的保证
+        
+    - iteration: 7
+      name: "交付准备"
+      focus:
+        - "文档完善"
+        - "最终检查"
+        - "准备提交"
+      priority_checks:
+        - "documentation_complete"
+        - "final_check_passed"
+        - "delivery_ready"
+      suggestion: |
+        📦 **第7轮迭代：交付准备**
+        
+        **目标**: 完善文档，准备交付
+        
+        **重点关注**:
+        - 完善文档说明
+        - 进行最终检查
+        - 准备交付材料
+        - 清理临时内容
+        
+        **最终检查**:
+        - 功能完整
+        - 测试通过
+        - 文档完善
+        - 可以交付
+        
+        💡 提示：良好的交付体现专业素养
+  quality_gates:
+    - type: completion_check
+      check: "verify_task_completion"
+      required: true
+      weight: 0.5
+    - type: quality_check
+      check: "verify_output_quality"
+      required: true
+      weight: 0.3
+  optimization_hints: true
+  auto_rollback: true
+keywords: []
+name: task
+states:
+- pending
+- in_progress
+- completed
+structure: '# {{ id }}
+
+
+  ## ⚠️ 重要提示（Agent 必读）
+
+
+  **当前位置**: `.long-run-agent/tasks/{{id}}.md`（任务描述文件）
+
+
+  **工作目录**: 项目根目录（`.long-run-agent` 的同级目录）
+
+
+  **产出物**: 请在项目根目录或适当子目录创建交付物
+
+
+  **这是配置文件**，不是最终产出！
+
+
+  ## 描述
+
+
+  {{ description }}
+
+
+  ## 需求 (requirements)
+
+
+  <!-- 在此填写具体需求描述 -->
+
+
+  ## 验收标准 (acceptance)
+
+
+  <!-- 在此填写验收标准，每行一个条件 -->
+
+
+  ## 交付物 (deliverables)
+
+
+  <!-- 在此填写交付物文件路径 -->
+
+
+  '
+template_engine: jinja2
+transitions:
+  completed: []
+  in_progress:
+  - completed
+  pending:
+  - in_progress
+version: '2.0'
