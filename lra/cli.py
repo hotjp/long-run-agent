@@ -506,17 +506,17 @@ class LRACLI:
     def cmd_create(
         self,
         description: str,
-        template: str = None,
+        template: Optional[str] = None,
         priority: str = "P1",
         output_req: str = "8k",
-        parent: str = None,
-        dependencies: str = None,
+        parent: Optional[str] = None,
+        dependencies: Optional[str] = None,
         dependency_type: str = "all",
-        deadline: str = None,
-        variables: str = None,
-        requirements: str = None,
-        acceptance: str = None,
-        design: str = None,
+        deadline: Optional[str] = None,
+        variables: Optional[str] = None,
+        requirements: Optional[str] = None,
+        acceptance: Optional[str] = None,
+        design: Optional[str] = None,
         json_mode: bool = False,
     ):
         if not self._check_project():
@@ -565,6 +565,14 @@ class LRACLI:
             if json_mode:
                 output({"ok": True, "task": result}, json_mode)
             else:
+                # 如果没有提供设计，显示警告
+                if not vars_dict:
+                    print(f"⚠️ 警告: 未填写设计，其他 agent 无法认领")
+                    print(f"   请用以下命令重新创建并填写设计:")
+                    print(
+                        f'   lra create "{description}" -var \'{{"requirements":"...","acceptance":["..."],"design":"..."}}\''
+                    )
+
                 # v3.3.3: 自动降级提示（仅在首次显示）
                 if result.get("_auto_adjusted"):
                     # 检查当前项目是否已经有过增量模式任务（排除刚创建的这个）
@@ -579,9 +587,9 @@ class LRACLI:
                         print(f"💡 增量模式：'-模块'自动添加")
 
                 # 显示任务创建成功信息
-                template = result.get("template", "task")
+                template = result.get("template", "task") or "task"
                 status = result.get("status", "pending")
-                task_id = result.get("id")
+                task_id = result.get("id", "")
 
                 # 获取状态流转信息
                 transitions = self.template_manager.get_transitions_for_template(template)
@@ -590,7 +598,7 @@ class LRACLI:
                 # 🆕 使用引导系统
                 from lra.guide import NextStepGuide
 
-                print(NextStepGuide.after_create(task_id, template))
+                print(NextStepGuide.after_create(task_id, template, bool(vars_dict)))
 
                 # v3.3.3: 智能提示系统
                 tip = self._get_tip_for_command("create", description)
@@ -1178,9 +1186,9 @@ class LRACLI:
     def cmd_split(
         self,
         task_id: str,
-        count: int = None,
-        plan: str = None,
-        plan_file: str = None,
+        count: Optional[int] = None,
+        plan: Optional[str] = None,
+        plan_file: Optional[str] = None,
         json_mode: bool = False,
     ):
         if not self._check_project():
@@ -1275,9 +1283,17 @@ class LRACLI:
 """)
 
         print("\n📄 子任务详情文件:")
+        from lra.config import Config
+        import os
+
+        metadata_dir = Config.get_metadata_dir()
+        project_root = os.getcwd()
+        rel_path = metadata_dir.replace(project_root, "")
+        if rel_path.startswith("/"):
+            rel_path = "." + rel_path
         for task in tasks:
             task_id = task.get("id", "")
-            task_file = task.get("task_file", f"tasks/{task_id}.md")
+            task_file = f"{rel_path}/tasks/{task_id}.md"
             print(f"   • {task_id}: {task_file}")
         print("\n💡 提示: 使用 lra show <task_id> 查看任务详情")
         print("=" * 50)
@@ -1291,9 +1307,11 @@ class LRACLI:
         filled, missing = self._check_task_filled(task_id)
         if not filled:
             task = self.task_manager.get(task_id)
-            task_file = (
-                task.get("task_file", f"tasks/{task_id}.md") if task else f"tasks/{task_id}.md"
-            )
+            # 使用相对于项目根目录的路径
+            from lra.config import Config
+
+            metadata_dir = Config.get_metadata_dir()
+            task_file = f".{metadata_dir}/tasks/{task_id}.md"
 
             if json_mode:
                 output(
@@ -1457,7 +1475,9 @@ class LRACLI:
         else:
             output({"error": "not_found"}, json_mode)
 
-    def cmd_template_create(self, name: str, from_template: str = None, json_mode: bool = False):
+    def cmd_template_create(
+        self, name: str, from_template: Optional[str] = None, json_mode: bool = False
+    ):
         success, msg = self.template_manager.create_template(name, from_template)
         output({"ok": success, "path": msg} if success else {"ok": False, "error": msg}, json_mode)
 
@@ -2238,21 +2258,31 @@ class LRACLI:
         """Agent上下文重建"""
         self.extensions.cmd_orientation(json_mode)
 
-    def cmd_regression_test(self, task_id=None, template=None, report=False, json_mode=False):
+    def cmd_regression_test(
+        self,
+        task_id: Optional[str] = None,
+        template: Optional[str] = None,
+        report: bool = False,
+        json_mode: bool = False,
+    ):
         """回归测试"""
         self.extensions.cmd_regression_test(task_id, template, report, json_mode)
 
-    def cmd_browser_test(self, task_id=None, generate_script=False, json_mode=False):
+    def cmd_browser_test(
+        self, task_id: Optional[str] = None, generate_script: bool = False, json_mode: bool = False
+    ):
         """浏览器自动化测试"""
         self.extensions.cmd_browser_test(task_id, generate_script, json_mode)
 
-    def cmd_quality_check(self, task_id=None, report=False, json_mode=False):
+    def cmd_quality_check(
+        self, task_id: Optional[str] = None, report: bool = False, json_mode: bool = False
+    ):
         """代码质量检查"""
         self.extensions.cmd_quality_check(task_id, report, json_mode)
 
     def cmd_start(
         self,
-        task_desc: str = None,
+        task_desc: Optional[str] = None,
         project_name: str = None,
         auto: bool = False,
         json_mode: bool = False,
@@ -2482,24 +2512,21 @@ def main():
     )
     create_p.add_argument("description", help="Task description (required)")
 
-    # 常用参数 (短参数)
+    # 任务详情
     create_p.add_argument(
-        "-r",
         "--requirements",
         default=None,
-        help="Task requirements (推荐使用)",
+        help="Task requirements",
     )
     create_p.add_argument(
-        "-a",
         "--acceptance",
         default=None,
-        help="Acceptance criteria, comma-separated (推荐使用)",
+        help="Acceptance criteria, comma-separated",
     )
     create_p.add_argument(
-        "-d",
         "--design",
         default=None,
-        help="Design solution (推荐使用)",
+        help="Design solution",
     )
 
     # 常用参数
@@ -2514,9 +2541,10 @@ def main():
 
     # 高级参数
     create_p.add_argument(
+        "-var",
         "--variables",
         default=None,
-        help='JSON variables: \'{"requirements":"...","acceptance":["..."],"design":"..."}\'',
+        help='[必填] JSON: \'{"requirements":"...","acceptance":["..."],"design":"..."}\'',
     )
     create_p.add_argument(
         "--priority",

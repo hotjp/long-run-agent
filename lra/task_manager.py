@@ -63,12 +63,12 @@ class TaskManager:
         description: str,
         template: str = "task",
         priority: str = "P1",
-        parent_id: str = None,
+        parent_id: Optional[str] = None,
         output_req: str = "8k",
-        dependencies: List[str] = None,
-        deadline: str = None,
+        dependencies: Optional[List[str]] = None,
+        deadline: Optional[str] = None,
         dependency_type: str = "all",
-        variables: Dict[str, Any] = None,
+        variables: Optional[Dict[str, Any]] = None,
         skip_system_check: bool = False,
     ) -> Tuple[bool, Dict[str, Any]]:
         data = self._load()
@@ -622,7 +622,10 @@ class TaskManager:
         return unblocked
 
     def list_all(
-        self, status: str = None, parent_id: str = None, template: str = None
+        self,
+        status: Optional[str] = None,
+        parent_id: Optional[str] = None,
+        template: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         data = self._load()
         if not data:

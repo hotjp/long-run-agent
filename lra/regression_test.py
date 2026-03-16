@@ -204,7 +204,8 @@ class RegressionTestManager:
         task_manager = TaskManager()
 
         # 将状态改为 test_failed（如果模板支持）
-        template = task_manager.get_task_template(task_id)
+        task = task_manager.get(task_id)
+        template = task.get("template", "task") if task else "task"
         if template == "code-module":
             task_manager.update_status(task_id, "test_failed", force=True)
         else:
