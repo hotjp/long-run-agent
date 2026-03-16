@@ -514,6 +514,9 @@ class LRACLI:
         dependency_type: str = "all",
         deadline: str = None,
         variables: str = None,
+        requirements: str = None,
+        acceptance: str = None,
+        design: str = None,
         json_mode: bool = False,
     ):
         if not self._check_project():
@@ -537,6 +540,15 @@ class LRACLI:
             except:
                 output({"error": "invalid_variables_json"}, json_mode)
                 return
+
+        # 短参数 (-r, -a, -d) 覆盖或添加到 variables
+        if requirements:
+            vars_dict["requirements"] = requirements
+        if acceptance:
+            # 支持逗号分隔的列表
+            vars_dict["acceptance"] = [a.strip() for a in acceptance.split(",")]
+        if design:
+            vars_dict["design"] = design
 
         success, result = self.task_manager.create(
             description=description,
@@ -2469,36 +2481,60 @@ def main():
         "Task ID is auto-generated (e.g., task_001).",
     )
     create_p.add_argument("description", help="Task description (required)")
+
+    # 常用参数 (短参数)
+    create_p.add_argument(
+        "-r",
+        "--requirements",
+        default=None,
+        help="Task requirements (推荐使用)",
+    )
+    create_p.add_argument(
+        "-a",
+        "--acceptance",
+        default=None,
+        help="Acceptance criteria, comma-separated (推荐使用)",
+    )
+    create_p.add_argument(
+        "-d",
+        "--design",
+        default=None,
+        help="Design solution (推荐使用)",
+    )
+
+    # 常用参数
     create_p.add_argument(
         "--template",
         default=None,
-        help="Task template (default: project default template). Use 'lra template list' to see available templates",
+        help="Task template. Use 'lra template list' to see available templates",
+    )
+    create_p.add_argument(
+        "--dependencies", default=None, help="Comma-separated task IDs that this task depends on"
+    )
+
+    # 高级参数
+    create_p.add_argument(
+        "--variables",
+        default=None,
+        help='JSON variables: \'{"requirements":"...","acceptance":["..."],"design":"..."}\'',
     )
     create_p.add_argument(
         "--priority",
         default="P1",
         choices=["P0", "P1", "P2", "P3"],
-        help="Task priority (default: P1)",
+        help="Task priority: P0/P1/P2/P3 (default: P1)",
     )
     create_p.add_argument(
-        "--output-req", default="8k", help="Expected output size: 4k/8k/16k/32k/128k (default: 8k)"
+        "--output-req", default="8k", help="Output size: 4k/8k/16k/32k/128k (default: 8k)"
     )
     create_p.add_argument("--parent", default=None, help="Parent task ID for subtasks")
-    create_p.add_argument(
-        "--dependencies", default=None, help="Comma-separated task IDs that this task depends on"
-    )
     create_p.add_argument(
         "--dependency-type",
         default="all",
         choices=["all", "any"],
         help="Dependency type: all or any (default: all)",
     )
-    create_p.add_argument("--deadline", default=None, help="Task deadline (ISO format: YYYY-MM-DD)")
-    create_p.add_argument(
-        "--variables",
-        default=None,
-        help='JSON variables for template: \'{"key":"value"}\' - see lra template show <name>',
-    )
+    create_p.add_argument("--deadline", default=None, help="Task deadline (ISO: YYYY-MM-DD)")
 
     # show
     show_p = subparsers.add_parser("show", help="Show task")
@@ -2528,7 +2564,7 @@ Recommended workflow:
         "--count",
         type=int,
         default=None,
-        help="(Deprecated) Quick mode: create empty subtasks with generic names",
+        help="(Deprecated) 已废弃，请使用 --plan 或 --plan-file 参数",
     )
     split_p.add_argument(
         "--plan",
@@ -2821,6 +2857,9 @@ Recommended workflow:
             args.dependency_type,
             args.deadline,
             args.variables,
+            args.requirements,
+            args.acceptance,
+            args.design,
             json_mode,
         )
     elif args.command == "show":

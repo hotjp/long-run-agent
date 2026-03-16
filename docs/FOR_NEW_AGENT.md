@@ -101,7 +101,7 @@ lra set task_001 completed
 ```bash
 # 1. 创建父任务并拆分
 lra create "Web应用开发"
-lra split <parent_id> --count 3
+lra split <parent_id> --plan '[{"desc":"子任务1","requirements":"需求","acceptance":["完成"],"deliverables":["文件"]},{"desc":"子任务2","requirements":"需求","acceptance":["完成"],"deliverables":["文件"]},{"desc":"子任务3","requirements":"需求","acceptance":["完成"],"deliverables":["文件"]}]'
 
 # 2. 认领父任务
 lra claim <parent_id>
