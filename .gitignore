@@ -68,3 +68,4 @@ dist/
 /resource_coordinator.py
 /init.sh.template
 /.long-run-agent/
+.opencode/
