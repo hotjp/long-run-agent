@@ -5,7 +5,7 @@
 
 ## 概述
 
-LRA - AI Agent Task Manager with Quality Assurance v4.0.1
+LRA - AI Agent Task Manager with Quality Assurance v5.0.0
 
 ## 核心类
 

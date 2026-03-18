@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-测试 v4.0 修复的功能
+测试 v5.0 修复的功能
 测试用例覆盖：
 1. batch-lock agent_id 一致性
 2. record 功能（list/show/timeline）

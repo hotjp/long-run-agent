@@ -4,7 +4,7 @@
 
 ## 概述
 
-LRA CLI v4.0
+LRA CLI v5.0
 AI Agent 任务管理 + 质量保障
 
 ## 类

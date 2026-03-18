@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-LRA CLI v4.0
+LRA CLI v5.0
 AI Agent 任务管理 + 质量保障
 """
 
@@ -90,7 +90,7 @@ class LRACLI:
         self._locks_manager = None
         self._batch_lock_manager = None
         self.system_check_available = HAS_SYSTEM_CHECK
-        self.extensions = CLIExtensions(self)  # v4.0: 初始化扩展
+        self.extensions = CLIExtensions(self)  # v5.0: 初始化扩展
 
     @property
     def template_manager(self):
@@ -2261,7 +2261,7 @@ class LRACLI:
             elif error == "tasks_dir_not_found":
                 print(f"\n💡 提示：请确保项目已初始化")
 
-    # ==================== v4.0 新增命令 ====================
+    # ==================== v5.0 新增命令 ====================
 
     def cmd_status(self, json_mode: bool = False):
         """项目进度可视化"""
@@ -2476,7 +2476,7 @@ class LRACLI:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="LRA v4.0 - AI Agent Task Manager with Quality Assurance",
+        description="LRA v5.0 - AI Agent Task Manager with Quality Assurance",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=AGENT_GUIDE,
     )
@@ -2844,7 +2844,7 @@ Recommended workflow:
     # v3.4.1: recover - 恢复任务列表
     subparsers.add_parser("recover", help="Recover task list from tasks/ directory")
 
-    # ==================== v4.0 新增命令 ====================
+    # ==================== v5.0 新增命令 ====================
 
     # status - 项目进度可视化
     subparsers.add_parser("status", help="Visualize project progress")
@@ -2997,7 +2997,7 @@ Recommended workflow:
     elif args.command == "recover":
         cli.cmd_recover(json_mode)
 
-    # ==================== v4.0 新增命令分发 ====================
+    # ==================== v5.0 新增命令分发 ====================
 
     elif args.command == "status":
         cli.cmd_status(json_mode)

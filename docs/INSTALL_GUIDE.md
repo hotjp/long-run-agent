@@ -1,8 +1,8 @@
-# LRA v4.0 - 安装与使用指南
+# LRA v5.0 - 安装与使用指南
 
 ## 🎉 重命名完成！
 
-LRA (Long-Run-Agent) v4.0 已成功从 `long-run-agent` 重命名为 `lra`。
+LRA (Long-Run-Agent) v5.0 已成功从 `long-run-agent` 重命名为 `lra`。
 
 ---
 
@@ -43,11 +43,11 @@ lra --help
 ```bash
 # 查看版本
 $ python3 -c "from lra import __version__; print(__version__)"
-4.0.0
+5.0.0
 
 # 查看帮助
 $ lra --help
-LRA v4.0 - AI Agent Task Manager
+LRA v5.0 - AI Agent Task Manager
 
 # 测试命令
 $ lra status
@@ -117,7 +117,7 @@ lra set task_001 completed
 
 ---
 
-## 🆕 v4.0 新功能
+## 🆕 v5.0 新功能
 
 ### 新增命令
 
@@ -131,7 +131,7 @@ lra set task_001 completed
 
 ### 增强的模板
 
-v4.0 的任务模板现在包含**验证证据**字段：
+v5.0 的任务模板现在包含**验证证据**字段：
 
 ```markdown
 ## 验证证据（完成前必填）
@@ -333,18 +333,18 @@ python3 -c "from lra import __version__; print(__version__)"
 
 ## ✨ 总结
 
-LRA v4.0 主要变化：
+LRA v5.0 主要变化：
 
 ✅ **包名简化**: `long-run-agent` → `lra`
-✅ **版本升级**: v3.4.1 → v4.0.0
+✅ **版本升级**: v3.4.1 → v5.0.0
 ✅ **功能增强**: 新增7大质量保障功能
 ✅ **向后兼容**: 项目数据100%兼容
 ✅ **无缝迁移**: 只需重新安装
 
-**开始使用 LRA v4.0 吧！** 🚀
+**开始使用 LRA v5.0 吧！** 🚀
 
 ---
 
 **安装日期**: 2026-03-03
-**版本**: LRA v4.0.0
+**版本**: LRA v5.0.0
 **状态**: ✅ 生产就绪

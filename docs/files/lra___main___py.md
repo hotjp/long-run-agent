@@ -4,7 +4,7 @@
 
 ## 概述
 
-LRA v4.0 - Package entry point
+LRA v5.0 - Package entry point
 Usage: python3 -m lra
 
 ## 依赖

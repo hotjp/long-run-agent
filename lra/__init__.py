@@ -1,5 +1,5 @@
 """
-LRA - AI Agent Task Manager with Quality Assurance v4.0.1
+LRA - AI Agent Task Manager with Quality Assurance v5.0.0
 """
 
 __version__ = "5.0.0"

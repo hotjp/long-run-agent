@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-LRA v4.0 配置模块
+LRA v5.0 配置模块
 通用任务管理框架
 """
 

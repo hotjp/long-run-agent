@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-LRA v4.0 CLI 集成脚本
+LRA v5.0 CLI 集成脚本
 自动将新功能集成到现有CLI
 """
 
@@ -55,7 +55,7 @@ from .cli_extensions import CLIExtensions
     # 3. 添加新命令方法（在类的末尾）
     new_methods = '''
 
-    # ==================== v4.0 新增命令 ====================
+    # ==================== v5.0 新增命令 ====================
 
     def cmd_status(self, json_mode: bool = False):
         """项目进度可视化"""
@@ -104,7 +104,7 @@ def add_new_commands_to_parser():
     # 在 status-guide 命令后添加新命令
 
     new_commands = """
-    # ==================== v4.0 新增命令 ====================
+    # ==================== v5.0 新增命令 ====================
     
     # status - 项目进度可视化
     status_p = subparsers.add_parser("status", help="项目进度可视化")
@@ -164,7 +164,7 @@ def add_command_dispatch():
     print("📝 添加命令分发逻辑...")
 
     dispatch_code = """
-    # ==================== v4.0 新增命令分发 ====================
+    # ==================== v5.0 新增命令分发 ====================
     
     elif args.command == "status":
         cli.cmd_status(json_mode)
@@ -224,7 +224,7 @@ def update_agent_guide():
 
     # 更新 AGENT_GUIDE
     new_guide = '''AGENT_GUIDE = """
-LRA v4.0 | AI Agent 任务管理 + 质量保障
+LRA v5.0 | AI Agent 任务管理 + 质量保障
 
 🚀 快速开始
    lra start                           # 智能启动（推荐）
@@ -271,7 +271,7 @@ LRA v4.0 | AI Agent 任务管理 + 质量保障
 def main():
     """主函数"""
     print("\n" + "=" * 60)
-    print("  LRA v4.0 CLI 集成脚本")
+    print("  LRA v5.0 CLI 集成脚本")
     print("=" * 60 + "\n")
 
     # 检查当前目录
