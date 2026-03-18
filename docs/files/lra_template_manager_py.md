@@ -1,6 +1,6 @@
 # lra/template_manager.py
 
-> 语言：python | 代码行数：550
+> 语言：python | 代码行数：703
 
 ## 概述
 
@@ -11,7 +11,7 @@ v3.2 - Jinja2 模板引擎支持
 
 | 类名 | 方法数 | 说明 |
 |------|--------|------|
-| `TemplateManager` | 20 | - |
+| `TemplateManager` | 24 | - |
 
 ## 函数
 
@@ -23,6 +23,7 @@ v3.2 - Jinja2 模板引擎支持
 
 - os
 - yaml
+- logging
 - datetime
 - typing
 - lra.config

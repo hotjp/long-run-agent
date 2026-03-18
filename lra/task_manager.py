@@ -100,7 +100,7 @@ class TaskManager:
                         variables,
                     )
 
-        # 循环依赖检测（严重错误，保留）
+        # 循环依赖检测（严重错误，保留）- 必须在创建前检测
         if dependencies:
             has_cycle, cycle_path = self._detect_cycle(dependencies)
             if has_cycle:
@@ -120,7 +120,6 @@ class TaskManager:
         )
 
     def _auto_create_doc_task(self, task: Dict[str, Any], variables: Dict[str, Any] = None):
-        """为业务任务自动创建绑定的文档更新任务"""
         # 检查配置是否启用文档约束
         config = self._load_config()
         doc_enforcement = config.get("system_check", {}).get("doc_enforcement", "strict")

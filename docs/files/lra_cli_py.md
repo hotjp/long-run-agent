@@ -1,6 +1,6 @@
 # lra/cli.py
 
-> 语言：python | 代码行数：1941
+> 语言：python | 代码行数：2944
 
 ## 概述
 
@@ -11,7 +11,7 @@ AI Agent 任务管理 + 质量保障
 
 | 类名 | 方法数 | 说明 |
 |------|--------|------|
-| `LRACLI` | 56 | - |
+| `LRACLI` | 69 | - |
 
 ## 函数
 
@@ -37,3 +37,4 @@ AI Agent 任务管理 + 质量保障
 - lra.batch_lock_manager
 - lra.tips
 - lra.cli_extensions
+- lra.quality_checker

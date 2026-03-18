@@ -100,32 +100,34 @@ lra set task_001 completed
 **测试流程**:
 ```bash
 # 1. 创建父任务并拆分
-lra create "Web应用开发"
-lra split <parent_id> --plan '[{"desc":"子任务1","requirements":"需求","acceptance":["完成"],"deliverables":["文件"]},{"desc":"子任务2","requirements":"需求","acceptance":["完成"],"deliverables":["文件"]},{"desc":"子任务3","requirements":"需求","acceptance":["完成"],"deliverables":["文件"]}]'
+lra create "Web应用开发" -var '{"requirements":"需求","acceptance":["完成"],"design":"设计","deliverables":["文件"]}'
+lra split task_001 --plan '[{"desc":"子任务1","requirements":"需求","acceptance":["完成"],"deliverables":["文件"]},{"desc":"子任务2","requirements":"需求","acceptance":["完成"],"deliverables":["文件"]},{"desc":"子任务3","requirements":"需求","acceptance":["完成"],"deliverables":["文件"]}]'
 
 # 2. 认领父任务
-lra claim <parent_id>
+lra claim task_001
 
 # 3. 发布子任务（测试点：子任务状态变化）
-lra publish <parent_id>
+lra publish task_001
 lra list  # 查看子任务是否可被认领
 
 # 4. 测试心跳（测试点：锁续期）
-lra claim <task_id>
-lra heartbeat <task_id>
-lra show <task_id>  # 查看锁状态
+lra claim task_002
+lra heartbeat task_002
+lra show task_002  # 查看锁状态
 
 # 5. 测试批量锁（测试点：并发控制）
 lra batch-lock status
-lra batch-lock acquire --operation batch_claim --task-ids task_001,task_002
+lra batch-lock acquire --operation batch_claim --tasks task_003,task_004
 lra batch-lock status
 lra batch-lock release
+lra batch-lock logs  # 查看操作日志
 ```
 
 **预期结果**:
 - publish 后子任务状态变为可认领
 - heartbeat 成功续期锁
 - batch-lock 能正确管理并发操作
+- batch-lock logs 显示操作历史
 
 ---
 
@@ -135,15 +137,16 @@ lra batch-lock release
 
 **测试命令**:
 - check-blocked - 检查阻塞
-- deps - 依赖查看（已测试但需补充）
+- deps - 依赖查看
+- --dependency-type any/all - 依赖类型
 
 **测试流程**:
 ```bash
 # 1. 创建依赖链
-lra create "数据库设计"
-lra create "API接口"
-lra create "前端页面"
-lra create "集成测试" --dependencies task_001,task_002,task_003
+lra create "数据库设计" -var '{"requirements":"需求","acceptance":["完成"],"design":"设计"}'
+lra create "API接口" -var '{"requirements":"需求","acceptance":["完成"],"design":"设计"}'
+lra create "前端页面" -var '{"requirements":"需求","acceptance":["完成"],"design":"设计"}'
+lra create "集成测试" -var '{"requirements":"需求","acceptance":["完成"],"design":"设计"}' --dependencies task_001,task_002,task_003
 
 # 2. 查看依赖
 lra deps task_004
@@ -152,13 +155,16 @@ lra deps task_004 --dependents  # 查看谁依赖它
 # 3. 检查阻塞
 lra check-blocked  # task_004 应该被阻塞
 
-# 4. 完成前置任务
+# 4. 测试 --dependency-type any
+lra create "任意依赖任务" -var '{"requirements":"需求","acceptance":["完成"],"design":"设计"}' --dependencies task_001,task_002 --dependency-type any
+
+# 5. 完成前置任务
 lra claim task_001
 lra set task_001 in_progress
 lra set task_001 completed
 lra check-blocked  # 应该仍然阻塞（还有2个未完成）
 
-# 5. 完成所有前置
+# 6. 完成所有前置
 lra set task_002 completed
 lra set task_003 completed
 lra check-blocked  # 应该不再阻塞
@@ -169,6 +175,7 @@ lra show task_004  # 检查状态
 - 依赖任务被正确标记为 blocked
 - 完成前置任务后自动解除阻塞
 - deps 命令正确显示依赖关系
+- --dependency-type any 在任一依赖完成时解除阻塞
 
 ---
 
@@ -180,6 +187,7 @@ lra show task_004  # 检查状态
 - template show - 查看模板详情
 - template create - 创建自定义模板
 - template delete - 删除模板
+- status-guide - 状态流转指南
 
 **测试流程**:
 ```bash
@@ -188,22 +196,25 @@ lra template list
 lra template show task
 lra template show code-module  # 查看有测试流程的模板
 
-# 2. 创建自定义模板
-lra template create my-feature --from task
-# 手动编辑模板文件（如果需要）
-lra create "测试自定义模板" --template my-feature
+# 2. 查看所有模板的状态流转
+lra status-guide
 
-# 3. 测试模板的状态流转
+# 3. 创建自定义模板
+lra template create my-feature --from task
+lra create "测试自定义模板" --template my-feature -var '{"requirements":"需求","acceptance":["完成"],"design":"设计"}'
+
+# 4. 测试模板的状态流转
 lra show <task_id>  # 查看可用状态流转
 lra set <task_id> in_progress
 
-# 4. 删除自定义模板
+# 5. 删除自定义模板
 lra template delete my-feature
 lra template list  # 确认删除
 ```
 
 **预期结果**:
 - template show 显示完整的模板定义
+- status-guide 显示所有模板的状态流转图
 - 自定义模板能正常使用
 - 模板状态流转正确
 
@@ -217,11 +228,16 @@ lra template list  # 确认删除
 - batch set - 批量更新状态
 - batch delete - 批量删除
 - set-priority - 设置优先级
+- search --status - 按状态搜索
 
 **测试流程**:
 ```bash
 # 1. 创建多个任务
-for i in {1..5}; do lra create "任务$i"; done
+lra create "批量任务1" -var '{"requirements":"需求","acceptance":["完成"],"design":"设计"}'
+lra create "批量任务2" -var '{"requirements":"需求","acceptance":["完成"],"design":"设计"}'
+lra create "批量任务3" -var '{"requirements":"需求","acceptance":["完成"],"design":"设计"}'
+lra create "批量任务4" -var '{"requirements":"需求","acceptance":["完成"],"design":"设计"}'
+lra create "批量任务5" -var '{"requirements":"需求","acceptance":["完成"],"design":"设计"}'
 
 # 2. 设置优先级
 lra set-priority task_001 P0  # 最高优先级
@@ -236,9 +252,13 @@ lra batch claim task_001 task_002
 lra batch set task_001 task_002 in_progress
 lra list  # 查看状态
 
-# 5. 批量删除
-lra create "临时任务1"
-lra create "临时任务2"
+# 5. 按状态搜索
+lra search "批量" --status in_progress
+lra search "批量" --status pending
+
+# 6. 批量删除
+lra create "临时任务1" -var '{"requirements":"需求","acceptance":["完成"],"design":"设计"}'
+lra create "临时任务2" -var '{"requirements":"需求","acceptance":["完成"],"design":"设计"}'
 lra batch delete <temp_id1> <temp_id2>
 lra list  # 确认删除
 ```
@@ -247,6 +267,7 @@ lra list  # 确认删除
 - set-priority 正确影响任务排序
 - batch set 批量更新状态成功
 - batch delete 批量删除成功
+- search --status 正确过滤任务
 
 ---
 
@@ -256,34 +277,110 @@ lra list  # 确认删除
 
 **测试命令**:
 - record - 记录变更
+- record --auto - 自动记录git提交
 
 **测试流程**:
 ```bash
 # 1. 查看record帮助
 lra record --help
 
-# 2. 创建feature记录
-lra record add feature_001 --desc "用户认证功能"
+# 2. 初始化git仓库（如果没有）
+git init
+echo "test" > test.txt
+git add .
+git commit -m "initial commit"
 
-# 3. 记录git提交（如果有git仓库）
-lra record add feature_001 --commit "abc123" --desc "实现登录API"
+# 3. 自动记录git提交
+lra record add feature_001 --auto
 
-# 4. 查看记录
-lra record list feature_001
+# 4. 手动创建feature记录
+lra record add feature_002 --desc "用户认证功能"
+
+# 5. 记录git提交
+lra record add feature_002 --commit $(git rev-parse HEAD) --desc "实现登录API"
+
+# 6. 查看记录
+lra record list
 lra record show feature_001
+lra record show feature_002
 
-# 5. 查看时间线
-lra record timeline feature_001
+# 7. 查看时间线
+lra record timeline feature_002
 ```
 
 **预期结果**:
 - record 命令能正确记录变更
+- record --auto 自动获取当前git提交信息
 - 能查询历史记录
 - 时间线显示正确
 
 ---
 
-### 场景6: 高级功能（低优先级）
+### 场景6: 快速了解项目（中优先级）
+
+**目标**: 测试快速了解项目的命令
+
+**测试命令**:
+- orientation - 项目定位
+- status - 项目进度可视化
+
+**测试流程**:
+```bash
+# 1. 快速了解项目（推荐）
+lra orientation
+
+# 2. 查看项目进度可视化
+lra status
+
+# 3. 查看详细上下文
+lra context --full
+lra context --output-limit 16k
+
+# 4. 查看文件位置
+lra where
+lra index
+```
+
+**预期结果**:
+- orientation 一次性显示项目定位、进度、任务列表
+- status 显示可视化进度条
+- context --full 显示完整上下文
+- where 显示关键文件位置
+
+---
+
+### 场景7: 质量检查与测试（中优先级）
+
+**目标**: 测试质量保障相关命令
+
+**测试命令**:
+- quality-check - 代码质量检查
+- regression-test - 回归测试
+- browser-test - 浏览器测试
+
+**测试流程**:
+```bash
+# 1. 代码质量检查
+lra quality-check
+lra quality-check --report
+
+# 2. 回归测试
+lra regression-test
+lra regression-test --report
+lra regression-test --template code-module
+
+# 3. 浏览器测试
+lra browser-test --script
+```
+
+**预期结果**:
+- quality-check 显示代码质量报告
+- regression-test 运行回归测试
+- browser-test 生成测试脚本
+
+---
+
+### 场景8: 高级功能（低优先级）
 
 **目标**: 测试其他未测试的命令
 
@@ -296,18 +393,18 @@ lra record timeline feature_001
 # 1. 查看版本
 lra version
 
-# 2. 分析单个模块
-lra analyze-module lra  # 分析lra模块
-lra analyze-module cli  # 分析cli模块
-
-# 3. 对比analyze-project
+# 2. 分析整个项目
+lra analyze-project
 lra analyze-project --force
+
+# 3. 分析单个模块（在有代码的项目中）
+lra analyze-module <module_name>  # 需要在有Python/JS代码的项目中运行
 ```
 
 **预期结果**:
 - version 显示正确的版本号
-- analyze-module 输出模块级别的分析
-- 与 analyze-project 结果对比
+- analyze-project 输出项目分析结果
+- analyze-module 在空项目中有友好的错误提示
 
 ---
 
@@ -336,6 +433,7 @@ lra quality-check    # 质量检查
 - 测试锁冲突处理
 - 测试锁过期自动释放
 - 测试批量锁的事务性
+- 测试 batch-lock logs 查看历史
 
 ### 3. 依赖管理
 
@@ -349,6 +447,14 @@ lra quality-check    # 质量检查
 - 不存在的任务ID
 - 无效的状态转换
 - 重复操作
+
+### 5. 新增功能验证
+
+- `lra context --full` 参数是否正常
+- `lra orientation` 快速了解项目
+- `lra record --auto` 自动记录git
+- `lra analyze-module` 友好错误提示
+- `lra split --plan` 格式是否正确
 
 ## 开始方式
 
@@ -393,6 +499,7 @@ lra start --name test-project
 - [x] publish 命令测试
 - [x] heartbeat 命令测试
 - [x] batch-lock 命令测试
+- [x] batch-lock logs 测试
 - [ ] 锁冲突处理
 - [ ] 锁过期处理
 ...
@@ -437,5 +544,6 @@ lra start --name test-project
 - 让工具更友好，减少错误和困惑
 - 重点关注锁机制、依赖管理、批量操作
 - 检查v4.0新功能的集成状态
+- 验证新增的 --full 参数和 orientation 命令
 
 开始吧！

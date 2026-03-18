@@ -1,17 +1,17 @@
 # lra/task_manager.py
 
-> 语言：python | 代码行数：980
+> 语言：python | 代码行数：1620
 
 ## 概述
 
 任务管理器
-v3.4 - 项目级模板固定
+v3.5 - 支持 Ralph Loop 状态跟踪
 
 ## 类
 
 | 类名 | 方法数 | 说明 |
 |------|--------|------|
-| `TaskManager` | 41 | - |
+| `TaskManager` | 58 | - |
 
 ## 函数
 

@@ -258,6 +258,29 @@ class GitHelper:
             pass
         return files
 
+    @staticmethod
+    def get_staged_files() -> List[Dict[str, Any]]:
+        files = []
+        try:
+            r = subprocess.run(
+                ["git", "diff", "--numstat", "--cached"], capture_output=True, text=True
+            )
+            if r.returncode == 0:
+                for line in r.stdout.strip().split("\n"):
+                    if line:
+                        parts = line.split("\t")
+                        if len(parts) >= 3:
+                            files.append(
+                                {
+                                    "path": parts[2],
+                                    "added": int(parts[0]) if parts[0] != "-" else 0,
+                                    "deleted": int(parts[1]) if parts[1] != "-" else 0,
+                                }
+                            )
+        except:
+            pass
+        return files
+
 
 def validate_project_initialized() -> Tuple[bool, str]:
     if not os.path.exists(Config.get_task_list_path()):

@@ -1,6 +1,6 @@
 # lra/rwlock.py
 
-> 语言：python | 代码行数：107
+> 语言：python | 代码行数：92
 
 ## 概述
 
@@ -21,5 +21,5 @@
 ## 依赖
 
 - os
-- fcntl
 - typing
+- filelock

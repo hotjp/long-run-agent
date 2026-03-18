@@ -1,137 +1,24 @@
 acceptance: []
 description: 通用任务模板
-ralph:
-  auto_rollback: true
-  enabled: true
-  iteration_stages:
-  - focus:
-    - understand_goal
-    - define_criteria
-    - create_plan
-    ignore_checks:
-    - implementation_details
-    iteration: 1
-    name: 理解与规划
-    priority_checks:
-    - goal_understood
-    - criteria_defined
-    - plan_created
-    suggestion: |
-      🎯 **第1轮迭代：理解与规划**
-
-      **目标**: 充分理解任务，制定清晰计划
-
-      **重点关注**:
-      - 理解任务目标和背景
-      - 明确验收标准
-      - 分析需求和约束
-      - 制定执行计划
-
-      **可以忽略**:
-      - 具体实现细节
-
-      💡 提示：好的开始是成功的一半，充分理解任务再动手
-  - focus:
-    - complete_core
-    - ensure_usable
-    - verify_correct
-    ignore_checks:
-    - optimization
-    - edge_cases
-    iteration: 2
-    name: 基础实现
-    priority_checks:
-    - core_functional
-    - basic_usable
-    - correctness_verified
-    suggestion: |
-      🔧 **第2轮迭代：基础实现**
-
-      **目标**: 完成核心功能，确保基本可用
-
-      **重点关注**:
-      - 实现核心功能
-      - 确保功能可运行
-      - 验证基本正确性
-      - 完成最小可行方案
-
-      **可以忽略**:
-      - 性能优化
-      - 边界情况处理
-
-      💡 提示：先让核心功能跑通，不要过度设计
-  keywords: []
+keywords: []
 name: task
 states:
 - pending
 - in_progress
 - completed
-structure: |
-  # {{ id }}
-
-  ## ⚠️ 重要提示（Agent 必读）
-
-  **当前位置**: `.long-run-agent/tasks/{{id}}.md`（任务描述文件）
-
-  **工作目录**: 项目根目录（`.long-run-agent` 的同级目录）
-
-  **产出物**: 请在项目根目录或适当子目录创建交付物
-
-  **这是配置文件**，不是最终产出！
-
-  ## 描述
-
-  {{ description }}
-
-  {% if requirements %}
-  ## 需求 (requirements)
-
-  {{ requirements }}
-  {% else %}
-  ## 需求 (requirements)
-
-  <!-- 在此填写具体需求描述 -->
-  {% endif %}
-
-  {% if acceptance %}
-  ## 验收标准 (acceptance)
-
-  {% for item in acceptance %}
-  - {{ item }}
-  {% endfor %}
-  {% else %}
-  ## 验收标准 (acceptance)
-
-  <!-- 在此填写验收标准，每行一个条件 -->
-  {% endif %}
-
-  {% if deliverables %}
-  ## 交付物 (deliverables)
-
-  {% for item in deliverables %}
-  - {{ item }}
-  {% endfor %}
-  {% else %}
-  ## 交付物 (deliverables)
-
-  <!-- 在此填写交付物文件路径 -->
-  {% endif %}
-
-  ## 验证证据（完成前必填）
-
-  <!-- 标记完成前，请提供以下证据： -->
-
-  - [ ] **实现证明**: 简要说明如何实现
-  - [ ] **测试验证**: 如何验证功能正常（测试步骤/截图/命令输出）
-  - [ ] **影响范围**: 是否影响其他功能
-
-  ### 测试步骤
-  1.
-  2.
-  3.
-
-  ### 验证结果
-  <!-- 粘贴验证截图、命令输出或测试结果 -->
+structure: "# {{ id }}\n\n## ⚠️ 重要提示（Agent 必读）\n\n**当前位置**: `.long-run-agent/tasks/{{id}}.md`（任务描述文件）\n\
+  \n**工作目录**: 项目根目录（`.long-run-agent` 的同级目录）\n\n**产出物**: 请在项目根目录或适当子目录创建交付物\n\n**这是配置文件**，不是最终产出！\n\
+  \n## 描述\n\n{{ description }}\n\n{% if requirements %}\n## 需求 (requirements)\n\n\
+  {{ requirements }}\n{% else %}\n## 需求 (requirements)\n\n<!-- 在此填写具体需求描述 -->\n{%\
+  \ endif %}\n\n{% if acceptance %}\n## 验收标准 (acceptance)\n\n{% for item in acceptance\
+  \ %}\n- {{ item }}\n{% endfor %}\n{% else %}\n## 验收标准 (acceptance)\n\n<!-- 在此填写验收标准，每行一个条件\
+  \ -->\n{% endif %}\n\n{% if deliverables %}\n## 交付物 (deliverables)\n\n{% for item\
+  \ in deliverables %}\n- {{ item }}\n{% endfor %}\n{% else %}\n## 交付物 (deliverables)\n\
+  \n<!-- 在此填写交付物文件路径 -->\n{% endif %}\n\n{% if design %}\n## 设计方案 (design)\n\n{{ design\
+  \ }}\n{% else %}\n## 设计方案 (design)\n\n<!-- 在此填写架构设计、技术选型、实现思路 -->\n{% endif %}\n\
+  \n## 验证证据（完成前必填）\n\n<!-- 标记完成前，请提供以下证据： -->\n\n- [ ] **实现证明**: 简要说明如何实现\n- [ ] **测试验证**:\
+  \ 如何验证功能正常（测试步骤/截图/命令输出）\n- [ ] **影响范围**: 是否影响其他功能\n\n### 测试步骤\n1. \n2. \n3. \n\n\
+  ### 验证结果\n<!-- 粘贴验证截图、命令输出或测试结果 -->\n"
 template_engine: jinja2
 transitions:
   completed: []
@@ -139,4 +26,12 @@ transitions:
   - completed
   pending:
   - in_progress
-version: "2.0"
+validation:
+  evidence_fields:
+  - 实现证明
+  - 测试验证
+  - 影响范围
+  required_for_completion:
+    test_evidence: true
+    verification_steps: true
+version: '2.1'

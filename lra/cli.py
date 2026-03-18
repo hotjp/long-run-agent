@@ -326,12 +326,18 @@ class LRACLI:
                 print(f"❌ 未知操作: {action}")
                 print("   支持的操作: init, validate, show, reload, help")
 
-    def cmd_context(self, output_limit: str = "8k", json_mode: bool = False):
+    def cmd_context(self, output_limit: str = "8k", json_mode: bool = False, full: bool = False):
         if not self._check_project():
             output({"error": "not_initialized"}, json_mode)
             return
 
         context = self.task_manager.get_context(output_limit)
+
+        if full:
+            context_full = self.task_manager.get_context("128k")
+            context["in_progress"] = context_full.get("in_progress", [])
+            context["can_take"] = context_full.get("can_take", [])
+
         locks = self.locks_manager.get_all_locks()
 
         for task in context.get("can_take", []):
@@ -1990,7 +1996,14 @@ class LRACLI:
             result = analyzer.analyze_module(module_name)
 
             if not result:
-                output({"error": "module_not_found", "module": module_name}, json_mode)
+                output(
+                    {
+                        "error": "module_not_found",
+                        "module": module_name,
+                        "hint": "analyze-module需要在有代码的项目中使用。建议: 1) 在包含Python/JS代码的目录运行; 2) 先运行 'lra analyze-project' 分析项目结构",
+                    },
+                    json_mode,
+                )
                 return
 
             if output_doc:
@@ -2496,6 +2509,9 @@ def main():
     # context
     ctx_p = subparsers.add_parser("context", help="Get project context")
     ctx_p.add_argument("--output-limit", default="8k", choices=["4k", "8k", "16k", "32k", "128k"])
+    ctx_p.add_argument(
+        "--full", action="store_true", help="Show full context including in_progress tasks"
+    )
 
     # list
     list_p = subparsers.add_parser("list", help="List tasks")
@@ -2834,7 +2850,9 @@ Recommended workflow:
     subparsers.add_parser("status", help="Visualize project progress")
 
     # orientation - Agent上下文重建
-    subparsers.add_parser("orientation", help="Agent context reconstruction protocol")
+    subparsers.add_parser(
+        "orientation", help="Agent context reconstruction protocol - 快速了解项目状态"
+    )
 
     # regression-test - 回归测试
     regression_p = subparsers.add_parser("regression-test", help="Run regression tests")
@@ -2871,7 +2889,7 @@ Recommended workflow:
     elif args.command == "constitution":
         cli.cmd_constitution(args.action, json_mode)
     elif args.command == "context":
-        cli.cmd_context(args.output_limit, json_mode)
+        cli.cmd_context(args.output_limit, json_mode, getattr(args, "full", False))
     elif args.command == "list":
         cli.cmd_list(args.status, args.template, args.compact, json_mode)
     elif args.command == "create":
