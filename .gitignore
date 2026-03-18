@@ -69,3 +69,8 @@ dist/
 /init.sh.template
 /.long-run-agent/
 .opencode/
+
+# Temp files
+temp/
+docs/files/temp_*
+docs/modules/temp.*
