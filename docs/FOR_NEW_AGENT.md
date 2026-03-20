@@ -370,13 +370,13 @@ lra regression-test --report
 lra regression-test --template code-module
 
 # 3. 浏览器测试
-lra browser-test --script
+lra browser-test <task_id> --script  # 需要先从 context 获取 task_id
 ```
 
 **预期结果**:
 - quality-check 显示代码质量报告
 - regression-test 运行回归测试
-- browser-test 生成测试脚本
+- browser-test 显示使用说明（需要指定 task_id）
 
 ---
 
