@@ -36,21 +36,20 @@ LRA v5.0 | AI Agent 任务管理 + 质量保障 + Constitution
 🚀 快速开始
    lra start                           # 智能启动（推荐）
    lra init --name <项目名>             # 初始化项目
-   lra analyze-project                 # 生成文档+索引
-
-🏛️  Constitution (🆕 v5.0)
-   lra constitution init               # 初始化Constitution
-   lra constitution show               # 查看配置
-   lra constitution validate           # 验证配置
-   lra constitution help               # 使用指南
+   lra new "任务描述"                   # 快速创建+认领（推荐）
+   lra new "复杂任务" --auto-split      # 创建+拆分+认领第一个子任务
 
 📂 常用命令（按工作流）
-   项目: start | init | context | status | orientation | analyze-project
-   任务: list | create | show | set | split | search
+   快速: new | context | status | orientation
+   任务: list | create | show | set | split | decompose | search
    执行: claim | heartbeat | checkpoint | pause | resume | publish
    测试: regression-test | browser-test | quality-check
    依赖: deps | check-blocked
    批量: batch set|delete|claim
+
+🔀 任务拆分
+   lra decompose <id>                 # 分析任务并建议如何拆分
+   lra split <id> --auto             # 使用建议自动拆分
 
 🔐 锁机制: claim → heartbeat → publish
 🧪 质量保障: regression-test → browser-test → quality-check
@@ -620,6 +619,97 @@ class LRACLI:
             else:
                 output(result, json_mode)
 
+    def cmd_new(self, description: str, auto_split: bool = False, json_mode: bool = False):
+        """快速创建并认领任务"""
+        if not self._check_project():
+            output({"error": "not_initialized"}, json_mode)
+            return
+
+        # 自动填充最小字段
+        vars_dict = {
+            "requirements": description,
+            "acceptance": ["完成"],
+            "deliverables": [f"src/{description[:20].replace(' ', '_')}.py"],
+            "design": "快速任务",
+        }
+
+        # 创建任务
+        success, result = self.task_manager.create(
+            description=description,
+            template=self.task_manager.get_default_template(),
+            priority="P1",
+            output_req="8k",
+            parent_id=None,
+            dependencies=[],
+            deadline=None,
+            dependency_type="all",
+            variables=vars_dict,
+        )
+
+        if not success:
+            output(result, json_mode)
+            return
+
+        task_id = result.get("id")
+        if not task_id:
+            output({"error": "create_failed_no_id"}, json_mode)
+            return
+
+        if auto_split:
+            # 分解并自动拆分
+            decomp_success, decomp_result = self.task_manager.suggest_decomposition(task_id)
+            if decomp_success and decomp_result.get("subtasks"):
+                split_plan = decomp_result.get("subtasks", [])
+                self.task_manager.split_task(task_id, split_plan)
+                # 发布子任务
+                self.locks_manager.publish_children(task_id)
+                # 认领第一个子任务
+                children = self.task_manager.get_children(task_id)
+                if children:
+                    first_child = children[0]
+                    child_id = first_child.get("id")
+                    # 检查子任务是否可以认领
+                    can_claim, reason = self.locks_manager.can_claim(child_id)
+                    if can_claim:
+                        lock_result = self.locks_manager.claim(child_id)
+                        if json_mode:
+                            output({
+                                "ok": True,
+                                "task_id": child_id,
+                                "parent_id": task_id,
+                                "message": f"Created and claimed first subtask {child_id}",
+                                "all_subtasks": [c.get("id") for c in children],
+                            }, json_mode)
+                        else:
+                            print(f"✅ 任务已创建并拆分")
+                            print(f"📋 父任务: {task_id}")
+                            print(f"🎯 已认领第一个子任务: {child_id}")
+                            print(f"📦 所有子任务: {', '.join([c.get('id') for c in children])}")
+                        return
+
+            # 分解失败，回退到直接认领父任务
+            can_claim, reason = self.locks_manager.can_claim(task_id)
+            if not can_claim:
+                output({"error": "cannot_claim", "reason": reason}, json_mode)
+                return
+            lock_result = self.locks_manager.claim(task_id)
+            if json_mode:
+                output({"ok": True, "task_id": task_id, "message": "Created and claimed (auto-split skipped)"}, json_mode)
+            else:
+                print(f"✅ 任务已创建并认领: {task_id}")
+        else:
+            # 直接认领父任务
+            can_claim, reason = self.locks_manager.can_claim(task_id)
+            if not can_claim:
+                output({"error": "cannot_claim", "reason": reason}, json_mode)
+                return
+            lock_result = self.locks_manager.claim(task_id)
+            if json_mode:
+                output({"ok": True, "task_id": task_id, "message": "Created and claimed"}, json_mode)
+            else:
+                print(f"✅ 任务已创建并认领: {task_id}")
+                print(f"💡 下一步: lra set {task_id} in_progress")
+
     def cmd_show(self, task_id: str, include_records: bool = False, json_mode: bool = False):
         if not self._check_project():
             output({"error": "not_initialized"}, json_mode)
@@ -1128,6 +1218,19 @@ class LRACLI:
             print(f"✅ 已进入迭代 {new_iteration}/{max_iterations}")
             print(f"   新阶段: {stage_name}\n")
 
+            # 运行迭代阶段门禁检查
+            gate_result = self.task_manager.run_iteration_gates(task_id, new_iteration)
+            if gate_result.get("gates"):
+                print("🔍 阶段质量检查:")
+                for gr in gate_result.get("gates", []):
+                    status = "✅" if gr["passed"] else "❌"
+                    print(f"   {status} {gr['name']}: {gr.get('description', '')}")
+                    if gr.get("output"):
+                        output_preview = gr["output"][:100] + "..." if len(gr.get("output", "")) > 100 else gr.get("output", "")
+                        if output_preview.strip():
+                            print(f"      输出: {output_preview}")
+                print()
+
             suggestion = self.task_manager.get_stage_suggestion(task_id)
             print(suggestion)
 
@@ -1195,6 +1298,7 @@ class LRACLI:
         count: Optional[int] = None,
         plan: Optional[str] = None,
         plan_file: Optional[str] = None,
+        auto: bool = False,
         json_mode: bool = False,
     ):
         if not self._check_project():
@@ -1213,8 +1317,35 @@ class LRACLI:
             )
             return
 
-        # 如果提供了 plan_file，读取文件内容
-        if plan_file:
+        # --auto 模式：使用上一次 decompose 的建议
+        if auto:
+            suggestion = self.task_manager.get_last_decomposition(task_id)
+            if not suggestion:
+                output(
+                    {
+                        "error": "no_decomposition_suggestion",
+                        "message": "没有可用的拆分建议，请先运行 lra decompose <task_id>",
+                        "hint": "lra decompose task_001  # 生成分解建议",
+                    },
+                    json_mode,
+                )
+                return
+            if suggestion.get("task_id") != task_id:
+                output(
+                    {
+                        "error": "suggestion_task_mismatch",
+                        "message": f"上一次分解建议是针对 {suggestion.get('task_id')}，不是 {task_id}",
+                        "hint": "lra decompose task_id  # 重新生成分解建议",
+                    },
+                    json_mode,
+                )
+                return
+            split_plan = suggestion.get("subtasks", [])
+            if not split_plan:
+                output({"error": "empty_suggestion", "message": "分解建议为空"}, json_mode)
+                return
+        elif plan_file:
+            # 如果提供了 plan_file，读取文件内容
             if not os.path.exists(plan_file):
                 output({"error": "plan_file_not_found", "file": plan_file}, json_mode)
                 return
@@ -1244,7 +1375,7 @@ class LRACLI:
                         "task_id": task_id,
                         "desc": task.get("description", ""),
                         "output_req": task.get("output_req", "8k"),
-                        "hint": "Use --plan or --plan-file to provide detailed specifications",
+                        "hint": "Use --plan or --plan-file to provide detailed specifications, or --auto to use decompose suggestion",
                     },
                     json_mode,
                 )
@@ -1260,6 +1391,44 @@ class LRACLI:
                 self._print_split_hints(result["tasks"])
         else:
             output({"error": "split_failed", "detail": result}, json_mode)
+
+    def cmd_decompose(self, task_id: str, json_mode: bool = False):
+        """分析任务并建议如何拆分"""
+        if not self._check_project():
+            output({"error": "not_initialized"}, json_mode)
+            return
+
+        success, result = self.task_manager.suggest_decomposition(task_id)
+
+        if not success:
+            output({"error": result.get("error", "unknown")}, json_mode)
+            return
+
+        if json_mode:
+            output(result, json_mode)
+            return
+
+        # 格式化输出
+        print("\n" + "=" * 50)
+        print(f"📊 任务分解分析: {task_id}")
+        print("=" * 50)
+        print(f"\n📝 任务描述: {result['description']}")
+        print(f"📏 需求规模: ~{result['requirements_tokens']} tokens")
+        print(f"⚡ 复杂度: {result['complexity']}")
+        print(f"💡 建议拆分为 {result['suggested_count']} 个子任务")
+
+        print("\n" + "-" * 50)
+        print("📋 拆分建议:")
+        print("-" * 50)
+
+        for i, subtask in enumerate(result["subtasks"], 1):
+            print(f"\n  [{i}] {subtask['desc']}")
+            print(f"      需求: {subtask.get('requirements', 'N/A')[:50]}...")
+
+        print("\n" + "-" * 50)
+        print("🚀 执行拆分:")
+        print(f"   lra split {task_id} --auto")
+        print("-" * 50 + "\n")
 
     def _print_split_hints(self, tasks: list):
         """打印子任务详情填充提示"""
@@ -2629,6 +2798,26 @@ Recommended workflow:
         default=None,
         help="Read plan from file (recommended for detailed specs). Example: --plan-file .long-run-agent/split_plan.json",
     )
+    split_p.add_argument(
+        "--auto",
+        action="store_true",
+        default=False,
+        help="使用上一次 lra decompose 的建议自动拆分",
+    )
+
+    # decompose
+    decomp_p = subparsers.add_parser(
+        "decompose",
+        help="分析任务并建议如何拆分",
+        description="""分析任务需求，自动建议如何拆分成子任务。
+
+推荐工作流:
+  1. lra create "复杂任务"
+  2. lra decompose task_001  # 查看拆分建议
+  3. lra split task_001 --auto  # 使用建议自动拆分
+""",
+    )
+    decomp_p.add_argument("task_id", help="要分析的任务ID")
 
     # claim
     subparsers.add_parser("claim", help="Claim task").add_argument("task_id")
@@ -2880,6 +3069,21 @@ Recommended workflow:
     start_p.add_argument("--name", help="Project name (for new projects)")
     start_p.add_argument("--auto", action="store_true", help="Auto mode, skip all prompts")
 
+    # new - quick create and claim
+    new_p = subparsers.add_parser(
+        "new",
+        help="Quick create + claim in one command",
+        description="""Create a task and immediately claim it.
+Useful for quick tasks without needing to fill in details manually.
+
+Examples:
+  lra new "Fix bug"                    # Create and claim immediately
+  lra new "Feature" --auto-split       # Create, decompose, split, and claim first subtask
+""",
+    )
+    new_p.add_argument("description", help="Task description")
+    new_p.add_argument("--auto-split", action="store_true", help="Auto decompose and split before claiming")
+
     args = parser.parse_args()
     json_mode = getattr(args, "json", False)
     cli = LRACLI()
@@ -2913,7 +3117,9 @@ Recommended workflow:
     elif args.command == "set":
         cli.cmd_set(args.task_id, args.status, json_mode)
     elif args.command == "split":
-        cli.cmd_split(args.task_id, args.count, args.plan, args.plan_file, json_mode)
+        cli.cmd_split(args.task_id, args.count, args.plan, args.plan_file, args.auto, json_mode)
+    elif args.command == "decompose":
+        cli.cmd_decompose(args.task_id, json_mode)
     elif args.command == "claim":
         cli.cmd_claim(args.task_id, json_mode)
     elif args.command == "publish":
@@ -3018,6 +3224,8 @@ Recommended workflow:
     elif args.command == "quality-check":
         cli.cmd_quality_check(getattr(args, "task_id", None), args.report, json_mode)
 
+    elif args.command == "new":
+        cli.cmd_new(args.description, args.auto_split, json_mode)
     elif args.command == "start":
         cli.cmd_start(args.task_desc, args.name, args.auto, json_mode)
     else:

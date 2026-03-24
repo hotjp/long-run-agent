@@ -38,16 +38,22 @@ pip install long-run-agent[full]
 cd /your/project
 lra init --name "My Project"
 
-# 🆕 查看Constitution配置
+# 快速创建+认领任务（推荐）
+lra new "实现登录功能"
+
+# 复杂任务：自动拆分+认领第一个子任务
+lra new "实现用户认证模块" --auto-split
+
+# 查看Constitution配置
 lra constitution show
 
 # Agent 获取上下文
 lra context --output-limit 8k
 
-# 🆕 Agent 上下文重建（推荐）
+# Agent 上下文重建（推荐）
 lra orientation
 
-# 🆕 查看项目进度
+# 查看项目进度
 lra status
 ```
 
@@ -129,6 +135,8 @@ core_principles:
 | 命令 | 用途 |
 |------|------|
 | `lra init --name <name>` | 初始化项目（自动创建Constitution） |
+| `lra new <desc>` | 🆕 快速创建+认领任务（自动填充字段） |
+| `lra new <desc> --auto-split` | 🆕 创建+自动拆分+认领第一个子任务 |
 | `lra constitution help` | 🆕 Constitution使用指南 |
 | `lra constitution show` | 🆕 查看Constitution配置 |
 | `lra constitution validate` | 🆕 验证Constitution有效性 |
@@ -137,8 +145,9 @@ core_principles:
 | `lra create <desc> --template <name>` | 创建任务 |
 | `lra show <id>` | 任务详情（包含迭代进度和阶段引导） |
 | `lra set <id> <status>` | 更新状态（自动Constitution验证） |
-| `lra set <id> force_next_stage` | 🆕 强制进入下一迭代阶段 |
-| `lra split <id> --plan '<json>'` | 拆分任务（模型提供方案） |
+| `lra set <id> force_next_stage` | 🆕 强制进入下一迭代阶段（含阶段质量检查） |
+| `lra split <id> --auto` | 🆕 使用decompose建议自动拆分 |
+| `lra decompose <id>` | 🆕 分析任务并建议如何拆分 |
 
 ### 🎯 Ralph Loop 迭代阶段引导 (v4.1.0)
 
@@ -292,14 +301,15 @@ lra set task_001 force_next_stage  # 强制进入下一阶段
 ## 多 Agent 协作流程
 
 ```
-1. 大模型 claim task_001（整个模块）
+1. 大模型 new "Web应用开发" --auto-split（创建+拆分+认领第一个子任务）
 2. 大模型编写架构/接口契约
-3. 大模型 split task_001 --plan '[...]'
-4. 大模型 publish task_001（释放子任务锁）
-5. 小模型 context --output-limit 8k（获取可领取任务）
-6. 小模型 claim task_001_01（领取子任务）
-7. 小模型按契约开发
-8. 大模型验收/集成
+3. 大模型 decompose task_001（查看拆分建议）
+4. 大模型 split task_001 --auto（使用建议自动拆分）
+5. 大模型 publish task_001（释放子任务锁）
+6. 小模型 context --output-limit 8k（获取可领取任务）
+7. 小模型 claim task_001_02（领取子任务）
+8. 小模型按契约开发
+9. 大模型验收/集成
 ```
 
 ## 输出限制适配

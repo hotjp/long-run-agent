@@ -18,6 +18,7 @@ class TaskManager:
     def __init__(self):
         self.task_list_path = Config.get_task_list_path()
         self._template_manager = None
+        self._last_decomposition_suggestion = None  # 存储最后一次分解建议
         self.system_check_report = None
 
     @property
@@ -1205,6 +1206,37 @@ class TaskManager:
 
         return False, 0
 
+    def run_iteration_gates(self, task_id: str, iteration: int) -> Dict[str, Any]:
+        """运行迭代阶段门禁，返回检查结果"""
+        from lra.constitution import ConstitutionManager, GateEvaluator
+
+        task = self.get(task_id)
+        if not task:
+            return {"passed": True, "gates": []}
+
+        manager = ConstitutionManager()
+        evaluator = GateEvaluator()
+
+        gates = manager.get_iteration_gates(iteration)
+        if not gates:
+            return {"passed": True, "gates": []}
+
+        gate_results = []
+        all_passed = True
+
+        for gate in gates:
+            result = evaluator.evaluate_gate(gate, task_id, task)
+            gate_results.append({
+                "name": gate.get("name", "unnamed"),
+                "passed": result.passed,
+                "description": gate.get("description", ""),
+                "output": result.output,
+            })
+            if not result.passed and gate.get("required", False):
+                all_passed = False
+
+        return {"passed": all_passed, "gates": gate_results}
+
     def record_quality_check(self, task_id: str, checks: Dict[str, bool]) -> Tuple[bool, str]:
         """记录质量检查结果"""
         data = self._load()
@@ -1619,3 +1651,187 @@ class TaskManager:
             "max_iterations": max_iterations,
             "priority_checks": priority_checks,
         }
+
+    def suggest_decomposition(self, task_id: str) -> Tuple[bool, Dict[str, Any]]:
+        """
+        分析任务并建议如何拆分成子任务
+
+        Returns:
+            (success, {
+                "task_id": ...,
+                "description": ...,
+                "requirements_tokens": ...,
+                "estimated_complexity": "low"|"medium"|"high",
+                "suggested_count": N,
+                "subtasks": [
+                    {"desc": "...", "output_req": "...", "requirements": "...", "acceptance": [], "deliverables": []},
+                    ...
+                ]
+            })
+        """
+        task = self.get(task_id)
+        if not task:
+            return False, {"error": "not_found"}
+
+        # 读取任务文件获取详细信息
+        task_dir = Config.get_tasks_dir()
+        task_path = os.path.join(task_dir, f"{task_id}.md")
+
+        requirements_text = ""
+        acceptance_criteria = []
+        deliverables = []
+
+        if os.path.exists(task_path):
+            try:
+                with open(task_path, "r", encoding="utf-8") as f:
+                    content = f.read()
+
+                # 提取 requirements
+                req_match = content.split("## 需求 (requirements)")[1].split("##")[0] if "## 需求" in content else ""
+                if not req_match:
+                    req_match = content.split("## requirements")[1].split("##")[0] if "## requirements" in content.lower() else ""
+                requirements_text = req_match.strip()
+
+                # 提取 acceptance
+                acc_match = content.split("## 验收标准 (acceptance)")[1].split("##")[0] if "## 验收标准" in content else ""
+                if not acc_match:
+                    acc_match = content.split("## acceptance")[1].split("##")[0] if "## acceptance" in content.lower() else ""
+                acceptance_criteria = [line.strip() for line in acc_match.split("\n") if line.strip().startswith("- ")]
+            except:
+                pass
+
+        # 分析复杂度
+        desc = task.get("description", "")
+        template = task.get("template", "task")
+        output_req = task.get("output_req", "8k")
+
+        # 粗略估算 tokens (约4字符/token)
+        req_tokens = len(requirements_text) // 4 if requirements_text else len(desc) // 4
+
+        # 复杂度关键词
+        complexity_keywords = {
+            "high": ["api", "数据库", "auth", "登录", "支付", "webhook", "中间件", "缓存", "队列", "并发", "分布式", "微服务"],
+            "medium": ["crud", "表单", "列表", "搜索", "导出", "导入", "验证", "配置", "上传", "下载"],
+        }
+
+        complexity = "low"
+        for kw in complexity_keywords["high"]:
+            if kw.lower() in (requirements_text + desc).lower():
+                complexity = "high"
+                break
+        if complexity == "low":
+            for kw in complexity_keywords["medium"]:
+                if kw.lower() in (requirements_text + desc).lower():
+                    complexity = "medium"
+                    break
+
+        # 基于复杂度估算拆分数量
+        # low: 1-2, medium: 2-3, high: 3-5
+        if complexity == "high":
+            suggested_count = 4
+        elif complexity == "medium":
+            suggested_count = 3
+        else:
+            suggested_count = 2
+
+        # 生成子任务建议
+        subtasks = self._generate_subtask_plan(desc, requirements_text, acceptance_criteria, suggested_count, output_req)
+
+        suggestion = {
+            "task_id": task_id,
+            "description": desc,
+            "template": template,
+            "requirements_tokens": req_tokens,
+            "complexity": complexity,
+            "suggested_count": suggested_count,
+            "subtasks": subtasks,
+        }
+
+        # 存储建议供 --auto 使用 (保存到 task_list.json)
+        data = self._load()
+        if data:
+            for t in data.get("tasks", []):
+                if t.get("id") == task_id:
+                    t["_decomposition_suggestion"] = suggestion
+                    break
+            self._save(data)
+
+        return True, suggestion
+
+    def _generate_subtask_plan(
+        self, parent_desc: str, requirements: str, acceptance: List[str], count: int, output_req: str
+    ) -> List[Dict[str, Any]]:
+        """生成子任务拆分计划"""
+        # 基于关键词分析可能的技术层面
+        desc_lower = (parent_desc + " " + requirements).lower()
+
+        subtask_patterns = []
+
+        # 分析可能涉及的技术组件
+        has_api = any(k in desc_lower for k in ["api", "接口", "endpoint", "rest", "grpc"])
+        has_db = any(k in desc_lower for k in ["数据库", "db", "存储", "model", "schema", "表"])
+        has_auth = any(k in desc_lower for k in ["认证", "auth", "登录", "权限", "permission", "角色"])
+        has_ui = any(k in desc_lower for k in ["界面", "ui", "前端", "页面", "组件", "表单"])
+        has_logic = any(k in desc_lower for k in ["业务", "逻辑", "service", "处理"])
+
+        # 如果有明确的模块名，提取
+        module_name = ""
+        words = parent_desc.split()
+        for i, w in enumerate(words):
+            if w in ["模块", "功能", "系统", "组件"]:
+                if i > 0:
+                    module_name = words[i-1]
+                break
+
+        # 根据识别的组件生成拆分
+        components = []
+        if has_api:
+            components.append(("接口定义", "API 接口设计与定义"))
+        if has_db:
+            components.append(("数据模型", "数据库模型与表结构"))
+        if has_logic:
+            components.append(("业务逻辑", "核心业务逻辑实现"))
+        if has_auth:
+            components.append(("权限管理", "用户认证与权限控制"))
+        if has_ui:
+            components.append(("界面开发", "前端界面实现"))
+
+        # 如果没有识别出组件，按顺序执行拆分
+        if not components:
+            for i in range(count):
+                subtask_patterns.append({
+                    "desc": f"{parent_desc} - 阶段{i+1}",
+                    "requirements": f"完成 {parent_desc} 的第 {i+1} 部分",
+                    "acceptance": [f"第 {i+1} 部分完成"],
+                    "deliverables": [f"阶段{i+1}产出物"],
+                })
+        else:
+            # 使用识别的组件进行拆分
+            for i, (name, req) in enumerate(components[:count]):
+                full_name = f"{module_name}{name}" if module_name else name
+                subtask_patterns.append({
+                    "desc": full_name,
+                    "requirements": f"{req}",
+                    "acceptance": [f"{name}实现完成"],
+                    "deliverables": [f"src/{name.lower().replace(' ', '_')}.py"],
+                })
+
+        # 确保返回 count 个子任务
+        while len(subtask_patterns) < count:
+            i = len(subtask_patterns)
+            subtask_patterns.append({
+                "desc": f"{parent_desc} - {chr(65+i)}",
+                "requirements": f"完成 {parent_desc} 的补充任务",
+                "acceptance": ["补充任务完成"],
+                "deliverables": [f"补充产出物{i+1}"],
+            })
+
+        return subtask_patterns[:count]
+
+    def get_last_decomposition(self, task_id: str = None) -> Optional[Dict[str, Any]]:
+        """获取指定任务的分解建议（供 --auto 使用）"""
+        if task_id:
+            task = self.get(task_id)
+            if task:
+                return task.get("_decomposition_suggestion")
+        return None
