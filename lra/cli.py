@@ -529,6 +529,10 @@ class LRACLI:
             output({"error": "not_initialized"}, json_mode)
             return
 
+        # v6.0: output_req 已废弃，请使用 context_hint
+        if output_req != "8k":  # Only warn if non-default
+            print("⚠️  warning: --output-req is deprecated, use --context-hint instead")
+
         # 如果未指定模板，使用项目默认模板
         if template is None:
             template = self.task_manager.get_default_template()
@@ -2747,7 +2751,8 @@ def main():
         help="Task priority: P0/P1/P2/P3 (default: P1)",
     )
     create_p.add_argument(
-        "--output-req", default="8k", help="Output size: 4k/8k/16k/32k/128k (default: 8k)"
+        "--output-req", "--context-hint", default="8k",
+        help="Output size hint: 4k/8k/16k/32k/128k (default: 8k). --output-req is deprecated."
     )
     create_p.add_argument("--parent", default=None, help="Parent task ID for subtasks")
     create_p.add_argument(

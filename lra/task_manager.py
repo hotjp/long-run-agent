@@ -274,7 +274,8 @@ class TaskManager:
             "priority": priority,
             "status": initial_status,
             "parent_id": parent_id,
-            "output_req": output_req,
+            "output_req": output_req,  # Deprecated: use context_hint instead
+            "context_hint": output_req,  # v6.0: canonical field name
             "task_file": f"tasks/{task_id}.md",
             "created_at": datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat(),
