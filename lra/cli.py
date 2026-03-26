@@ -21,6 +21,7 @@ from lra.batch_lock_manager import BatchLockManager
 from lra.tips import TIPS_CONFIG
 from lra.cli_extensions import CLIExtensions
 from lra.quality_checker import QualityChecker
+from lra.errors import get_error_with_action, format_error_display
 
 try:
     from lra.system_check import SystemCheckTask, ConfigManager
@@ -898,15 +899,15 @@ class LRACLI:
 
         failed_items = []
         if not quality_checks.get("tests_passed"):
-            test_issues = [i for i in issues if i.get("type") == "test_failure"]
+            test_issues = [i for i in issues if isinstance(i, dict) and i.get("type") == "test_failure"]
             if test_issues:
                 failed_items.append(("测试", test_issues))
         if not quality_checks.get("lint_passed"):
-            lint_issues = [i for i in issues if i.get("type") == "lint_error"]
+            lint_issues = [i for i in issues if isinstance(i, dict) and i.get("type") == "lint_error"]
             if lint_issues:
                 failed_items.append(("Lint", lint_issues))
         if not quality_checks.get("acceptance_met"):
-            acceptance_issues = [i for i in issues if i.get("type") == "acceptance_incomplete"]
+            acceptance_issues = [i for i in issues if isinstance(i, dict) and i.get("type") == "acceptance_incomplete"]
             if acceptance_issues:
                 failed_items.append(("验收", acceptance_issues))
 
@@ -973,17 +974,24 @@ class LRACLI:
             return
 
         template = current_task.get("template", "task")
-        transitions = self.template_manager.get_transitions_for_template(template)
-        available_transitions = transitions.get(current_status, [])
+
+        # Use unified method from task_manager to get available transitions
+        available_transitions = self.task_manager.get_available_transitions(task_id)
 
         if status not in available_transitions and not json_mode:
-            print(f"❌ 错误：无效的状态流转")
-            print(f"   当前状态：{current_status}")
-            print(f"   目标状态：{status}")
-            print(f"   模板：{template}")
-            print(
-                f"   可用状态流转：→ {', '.join(available_transitions) if available_transitions else '无（终态）'}"
-            )
+            err_ctx = {
+                "task_id": task_id,
+                "current": current_status,
+                "target": status,
+                "available": ', '.join(available_transitions) if available_transitions else '无',
+                "first_valid": available_transitions[0] if available_transitions else '',
+                "template": template,
+            }
+            err = get_error_with_action("invalid_transition", err_ctx)
+            print(f"❌ {err['message']}")
+            print(f"💡 建议: {err['action']}")
+            if err.get('hint'):
+                print(f"   原因: {err['hint']}")
             return
 
         success, msg = self.task_manager.update_status(task_id, status)
@@ -993,11 +1001,12 @@ class LRACLI:
                 self.locks_manager.release(task_id)
 
             if not json_mode:
-                new_transitions = transitions.get(status, [])
+                # Get available transitions from new unified method
+                next_transitions = self.task_manager.get_available_transitions(task_id)
                 print(f"✅ 状态已更新：{task_id}")
                 print(f"   新状态：{status}")
-                if new_transitions:
-                    print(f"   可用状态流转：→ {', '.join(new_transitions)}")
+                if next_transitions:
+                    print(f"   可用状态流转：→ {', '.join(next_transitions)}")
                 else:
                     print(f"   已到达终态")
 
@@ -1007,47 +1016,47 @@ class LRACLI:
         else:
             # 🆕 处理Constitution验证失败
             if not json_mode and "constitution_failed" in msg:
-                print(f"\n❌ Constitution验证失败\n")
-                print(f"   任务: {task_id}")
-                print(f"   状态: 自动进入 optimizing (优化中)\n")
-
                 # 解析失败原因
                 failures_str = msg.replace("constitution_failed:", "")
                 failures = [f.strip() for f in failures_str.split(";") if f.strip()]
 
+                err_ctx = {
+                    "task_id": task_id,
+                    "failures": '; '.join(failures[:3]),
+                }
+                err = get_error_with_action("constitution_failed", err_ctx)
+
+                print(f"\n❌ {err['message']}")
+                print(f"   任务: {task_id}")
+                print(f"   状态: 自动进入 optimizing (优化中)\n")
+
                 print("📋 失败项:\n")
-                for i, failure in enumerate(failures[:5], 1):  # 只显示前5个
+                for i, failure in enumerate(failures[:5], 1):
                     print(f"   {i}. {failure}")
-
                 if len(failures) > 5:
-                    print(f"   ... 还有 {len(failures) - 5} 项未显示\n")
-                else:
-                    print()
+                    print(f"   ... 还有 {len(failures) - 5} 项\n")
 
-                print("💡 修复建议:\n")
-                print("   1. 查看任务详情: lra show", task_id)
-                print("   2. 修复上述问题")
-                print("   3. 重新标记完成: lra set", task_id, "completed")
-                print("   4. 查看Constitution: lra constitution show\n")
-
-                print("📚 帮助: lra constitution help\n")
+                print(f"💡 {err['action']}")
 
             elif not json_mode and "constitution_non_negotiable_violation" in msg:
-                print(f"\n❌ 违反不可协商原则\n")
-                print(f"   任务: {task_id}\n")
-
                 failures_str = msg.replace("constitution_non_negotiable_violation:", "")
                 failures = [f.strip() for f in failures_str.split(";") if f.strip()]
+
+                err_ctx = {
+                    "task_id": task_id,
+                    "failures": '; '.join(failures),
+                }
+                err = get_error_with_action("constitution_non_negotiable", err_ctx)
+
+                print(f"\n❌ {err['message']}")
+                print(f"   任务: {task_id}\n")
 
                 print("🔴 不可协商原则违反:\n")
                 for i, failure in enumerate(failures, 1):
                     print(f"   {i}. {failure}")
 
-                print("\n⚠️  不可协商原则不能绕过，必须修复问题\n")
-                print("💡 修复建议:\n")
-                print("   1. 查看任务详情: lra show", task_id)
-                print("   2. 修复上述问题")
-                print("   3. 重新标记完成: lra set", task_id, "completed\n")
+                print(f"\n⚠️  {err['hint']}")
+                print(f"💡 {err['action']}")
 
             else:
                 output({"ok": success, "status": msg}, json_mode)

@@ -451,6 +451,13 @@ class TaskManager:
                                 self._unblock_dependents(task_id)
                             return True, status
 
+                    # optimizing -> in_progress (修复后继续工作)
+                    elif current_real_status == "optimizing" and status == "in_progress":
+                        t["status"] = status
+                        t["updated_at"] = datetime.now().isoformat()
+                        self._save(data)
+                        return True, status
+
                 # 正常状态流转
                 if not self.template_manager.validate_transition(template, current, status):
                     return False, f"invalid_transition:{current}->{status}"
@@ -1178,6 +1185,42 @@ class TaskManager:
                 return True, "updated"
 
         return False, "not_found"
+
+    def get_available_transitions(self, task_id: str) -> List[str]:
+        """
+        获取任务的所有可用状态转换。
+
+        统一返回模板状态转换和 Ralph Loop 状态转换。
+        这是 CLI 和其他组件获取转换规则的标准入口。
+
+        Returns:
+            可用目标状态列表，如 ["in_progress", "completed"]
+        """
+        task = self.get(task_id)
+        if not task:
+            return []
+
+        template = task.get("template", "task")
+        current_status = task.get("status", "pending")
+
+        # Ralph Loop 状态有特殊转换规则
+        ralph_states = {"optimizing", "truly_completed", "force_completed"}
+
+        if current_status in ralph_states:
+            # 从 Ralph Loop 状态只能转换到特定目标
+            if current_status == "optimizing":
+                return ["in_progress", "truly_completed", "force_completed"]
+            else:
+                # truly_completed 和 force_completed 是终态
+                return []
+
+        # Ralph Loop: completed 状态可以进入 optimizing 进行优化
+        if current_status == "completed":
+            return ["optimizing"]
+
+        # 正常模板状态转换
+        transitions = self.template_manager.get_transitions_for_template(template)
+        return transitions.get(current_status, [])
 
     def increment_iteration(self, task_id: str) -> Tuple[bool, int]:
         """增加迭代计数，返回新的迭代次数，并自动更新当前阶段"""
