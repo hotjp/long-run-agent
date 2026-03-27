@@ -21,7 +21,7 @@ from lra.batch_lock_manager import BatchLockManager
 from lra.tips import TIPS_CONFIG
 from lra.cli_extensions import CLIExtensions
 from lra.quality_checker import QualityChecker
-from lra.errors import get_error_with_action, format_error_display
+from lra.errors import get_error_with_action
 from lra.parsers import parse_dependencies, parse_variables
 
 try:
