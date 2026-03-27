@@ -22,6 +22,7 @@ from lra.tips import TIPS_CONFIG
 from lra.cli_extensions import CLIExtensions
 from lra.quality_checker import QualityChecker
 from lra.errors import get_error_with_action, format_error_display
+from lra.parsers import parse_dependencies, parse_variables
 
 try:
     from lra.system_check import SystemCheckTask, ConfigManager
@@ -540,15 +541,21 @@ class LRACLI:
         # 解析依赖
         deps = []
         if dependencies:
-            deps = [d.strip() for d in dependencies.split(",")]
+            try:
+                deps = parse_dependencies(dependencies) or []
+            except ValueError as e:
+                if not json_mode:
+                    print(f"❌ {e}")
+                return
 
         # 解析变量
         vars_dict = {}
         if variables:
             try:
-                vars_dict = json.loads(variables)
-            except:
-                output({"error": "invalid_variables_json"}, json_mode)
+                vars_dict = parse_variables(variables) or {}
+            except ValueError as e:
+                if not json_mode:
+                    print(f"❌ {e}")
                 return
 
         # 短参数 (-r, -a, -d) 覆盖或添加到 variables
