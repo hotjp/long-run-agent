@@ -530,9 +530,8 @@ class LRACLI:
             output({"error": "not_initialized"}, json_mode)
             return
 
-        # v6.0: output_req 已废弃，请使用 context_hint
-        if output_req != "8k":  # Only warn if non-default
-            print("⚠️  warning: --output-req is deprecated, use --context-hint instead")
+        # v6.0: context_hint is the canonical field name (output_req is deprecated but still works)
+        # Note: We can't easily distinguish --output-req from --context-hint with argparse aliases
 
         # 如果未指定模板，使用项目默认模板
         if template is None:
