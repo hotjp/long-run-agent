@@ -6,7 +6,7 @@ Supports both JSON format (preferred) and legacy formats (with deprecation warni
 """
 
 import json
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 
 
 def parse_dependencies(value: Optional[str]) -> Optional[List[str]]:
@@ -31,15 +31,16 @@ def parse_dependencies(value: Optional[str]) -> Optional[List[str]]:
         try:
             return json.loads(value)
         except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid JSON for --dependencies: {e}")
+            raise ValueError(f"Invalid JSON for --dependencies: {e}") from e
 
     # Fall back to comma-separated (deprecated)
     import warnings
+
     warnings.warn(
         "Comma-separated --dependencies is deprecated. Use JSON array instead: "
         '--dependencies \'["task_001", "task_002"]\'',
         DeprecationWarning,
-        stacklevel=2
+        stacklevel=2,
     )
     return [d.strip() for d in value.split(",") if d.strip()]
 
@@ -66,7 +67,7 @@ def parse_variables(value: Optional[str]) -> Optional[Dict[str, Any]]:
         try:
             return json.loads(value)
         except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid JSON for --variables: {e}")
+            raise ValueError(f"Invalid JSON for --variables: {e}") from e
 
     raise ValueError(
         "--variables must be JSON object. Example: "

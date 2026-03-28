@@ -5,8 +5,7 @@ This module provides a centralized error catalog that gives agents
 clear guidance on how to recover from errors.
 """
 
-from typing import Dict, Any, Optional
-
+from typing import Any, Dict
 
 ERROR_CATALOG = {
     "invalid_transition": {
@@ -83,12 +82,15 @@ def get_error_with_action(error_code: str, context: Dict[str, Any]) -> Dict[str,
     Returns:
         Dict with keys: error, message, action, hint, category
     """
-    error_def = ERROR_CATALOG.get(error_code, {
-        "message": f"错误: {error_code}",
-        "action": "查看文档: lra --help",
-        "hint": None,
-        "category": "unknown",
-    })
+    error_def = ERROR_CATALOG.get(
+        error_code,
+        {
+            "message": f"错误: {error_code}",
+            "action": "查看文档: lra --help",
+            "hint": None,
+            "category": "unknown",
+        },
+    )
 
     # Format message
     message = error_def["message"].format(**context)
