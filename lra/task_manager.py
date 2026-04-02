@@ -1270,12 +1270,14 @@ class TaskManager:
 
         for gate in gates:
             result = evaluator.evaluate_gate(gate, task_id, task)
-            gate_results.append({
-                "name": gate.get("name", "unnamed"),
-                "passed": result.passed,
-                "description": gate.get("description", ""),
-                "output": result.output,
-            })
+            gate_results.append(
+                {
+                    "name": gate.get("name", "unnamed"),
+                    "passed": result.passed,
+                    "description": gate.get("description", ""),
+                    "output": result.output,
+                }
+            )
             if not result.passed and gate.get("required", False):
                 all_passed = False
 
@@ -1731,16 +1733,34 @@ class TaskManager:
                     content = f.read()
 
                 # 提取 requirements
-                req_match = content.split("## 需求 (requirements)")[1].split("##")[0] if "## 需求" in content else ""
+                req_match = (
+                    content.split("## 需求 (requirements)")[1].split("##")[0]
+                    if "## 需求" in content
+                    else ""
+                )
                 if not req_match:
-                    req_match = content.split("## requirements")[1].split("##")[0] if "## requirements" in content.lower() else ""
+                    req_match = (
+                        content.split("## requirements")[1].split("##")[0]
+                        if "## requirements" in content.lower()
+                        else ""
+                    )
                 requirements_text = req_match.strip()
 
                 # 提取 acceptance
-                acc_match = content.split("## 验收标准 (acceptance)")[1].split("##")[0] if "## 验收标准" in content else ""
+                acc_match = (
+                    content.split("## 验收标准 (acceptance)")[1].split("##")[0]
+                    if "## 验收标准" in content
+                    else ""
+                )
                 if not acc_match:
-                    acc_match = content.split("## acceptance")[1].split("##")[0] if "## acceptance" in content.lower() else ""
-                acceptance_criteria = [line.strip() for line in acc_match.split("\n") if line.strip().startswith("- ")]
+                    acc_match = (
+                        content.split("## acceptance")[1].split("##")[0]
+                        if "## acceptance" in content.lower()
+                        else ""
+                    )
+                acceptance_criteria = [
+                    line.strip() for line in acc_match.split("\n") if line.strip().startswith("- ")
+                ]
             except:
                 pass
 
@@ -1754,8 +1774,32 @@ class TaskManager:
 
         # 复杂度关键词
         complexity_keywords = {
-            "high": ["api", "数据库", "auth", "登录", "支付", "webhook", "中间件", "缓存", "队列", "并发", "分布式", "微服务"],
-            "medium": ["crud", "表单", "列表", "搜索", "导出", "导入", "验证", "配置", "上传", "下载"],
+            "high": [
+                "api",
+                "数据库",
+                "auth",
+                "登录",
+                "支付",
+                "webhook",
+                "中间件",
+                "缓存",
+                "队列",
+                "并发",
+                "分布式",
+                "微服务",
+            ],
+            "medium": [
+                "crud",
+                "表单",
+                "列表",
+                "搜索",
+                "导出",
+                "导入",
+                "验证",
+                "配置",
+                "上传",
+                "下载",
+            ],
         }
 
         complexity = "low"
@@ -1779,7 +1823,9 @@ class TaskManager:
             suggested_count = 2
 
         # 生成子任务建议
-        subtasks = self._generate_subtask_plan(desc, requirements_text, acceptance_criteria, suggested_count, output_req)
+        subtasks = self._generate_subtask_plan(
+            desc, requirements_text, acceptance_criteria, suggested_count, output_req
+        )
 
         suggestion = {
             "task_id": task_id,
@@ -1803,7 +1849,12 @@ class TaskManager:
         return True, suggestion
 
     def _generate_subtask_plan(
-        self, parent_desc: str, requirements: str, acceptance: List[str], count: int, output_req: str
+        self,
+        parent_desc: str,
+        requirements: str,
+        acceptance: List[str],
+        count: int,
+        output_req: str,
     ) -> List[Dict[str, Any]]:
         """生成子任务拆分计划"""
         # 基于关键词分析可能的技术层面
@@ -1814,7 +1865,9 @@ class TaskManager:
         # 分析可能涉及的技术组件
         has_api = any(k in desc_lower for k in ["api", "接口", "endpoint", "rest", "grpc"])
         has_db = any(k in desc_lower for k in ["数据库", "db", "存储", "model", "schema", "表"])
-        has_auth = any(k in desc_lower for k in ["认证", "auth", "登录", "权限", "permission", "角色"])
+        has_auth = any(
+            k in desc_lower for k in ["认证", "auth", "登录", "权限", "permission", "角色"]
+        )
         has_ui = any(k in desc_lower for k in ["界面", "ui", "前端", "页面", "组件", "表单"])
         has_logic = any(k in desc_lower for k in ["业务", "逻辑", "service", "处理"])
 
@@ -1824,7 +1877,7 @@ class TaskManager:
         for i, w in enumerate(words):
             if w in ["模块", "功能", "系统", "组件"]:
                 if i > 0:
-                    module_name = words[i-1]
+                    module_name = words[i - 1]
                 break
 
         # 根据识别的组件生成拆分
@@ -1840,35 +1893,52 @@ class TaskManager:
         if has_ui:
             components.append(("界面开发", "前端界面实现"))
 
-        # 如果没有识别出组件，按顺序执行拆分
+        # 如果没有识别出组件，按通用开发流程拆分
         if not components:
+            generic_stages = [
+                ("需求分析", "完成需求分析和功能定义"),
+                ("方案设计", "完成技术方案和架构设计"),
+                ("编码实现", "完成核心代码编写"),
+                ("测试验证", "完成单元测试和集成测试"),
+                ("文档编写", "完成使用文档和API文档"),
+                ("代码审查", "完成代码 review 和优化"),
+            ]
             for i in range(count):
-                subtask_patterns.append({
-                    "desc": f"{parent_desc} - 阶段{i+1}",
-                    "requirements": f"完成 {parent_desc} 的第 {i+1} 部分",
-                    "acceptance": [f"第 {i+1} 部分完成"],
-                    "deliverables": [f"阶段{i+1}产出物"],
-                })
+                stage_name, stage_req = generic_stages[i] if i < len(generic_stages) else (f"阶段{i + 1}", f"完成第 {i + 1} 部分工作")
+                subtask_patterns.append(
+                    {
+                        "desc": stage_name,
+                        "requirements": stage_req,
+                        "acceptance": [f"{stage_name}完成"],
+                        "deliverables": [f"src/{stage_name.lower().replace(' ', '_')}.py"],
+                    }
+                )
         else:
             # 使用识别的组件进行拆分
             for i, (name, req) in enumerate(components[:count]):
                 full_name = f"{module_name}{name}" if module_name else name
-                subtask_patterns.append({
-                    "desc": full_name,
-                    "requirements": f"{req}",
-                    "acceptance": [f"{name}实现完成"],
-                    "deliverables": [f"src/{name.lower().replace(' ', '_')}.py"],
-                })
+                subtask_patterns.append(
+                    {
+                        "desc": full_name,
+                        "requirements": f"{req}",
+                        "acceptance": [f"{name}实现完成"],
+                        "deliverables": [f"src/{name.lower().replace(' ', '_')}.py"],
+                    }
+                )
 
         # 确保返回 count 个子任务
         while len(subtask_patterns) < count:
             i = len(subtask_patterns)
-            subtask_patterns.append({
-                "desc": f"{parent_desc} - {chr(65+i)}",
-                "requirements": f"完成 {parent_desc} 的补充任务",
-                "acceptance": ["补充任务完成"],
-                "deliverables": [f"补充产出物{i+1}"],
-            })
+            stage_names = ["收尾工作", "集成测试", "性能优化", "部署准备"]
+            stage_name = stage_names[i] if i < len(stage_names) else f"补充任务{i + 1}"
+            subtask_patterns.append(
+                {
+                    "desc": stage_name,
+                    "requirements": f"完成 {parent_desc} 的补充任务",
+                    "acceptance": ["补充任务完成"],
+                    "deliverables": [f"src/{stage_name.lower().replace(' ', '_')}.py"],
+                }
+            )
 
         return subtask_patterns[:count]
 

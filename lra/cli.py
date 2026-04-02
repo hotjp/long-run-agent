@@ -630,7 +630,7 @@ class LRACLI:
             else:
                 output(result, json_mode)
 
-    def cmd_new(self, description: str, auto_split: bool = False, json_mode: bool = False):
+    def cmd_new(self, description: str, auto_split: bool = False, variables: Optional[Dict[str, Any]] = None, json_mode: bool = False):
         """快速创建并认领任务"""
         if not self._check_project():
             output({"error": "not_initialized"}, json_mode)
@@ -643,6 +643,9 @@ class LRACLI:
             "deliverables": [f"src/{description[:20].replace(' ', '_')}.py"],
             "design": "快速任务",
         }
+        # 合并用户提供的变量
+        if variables:
+            vars_dict.update(variables)
 
         # 创建任务
         success, result = self.task_manager.create(
@@ -684,13 +687,16 @@ class LRACLI:
                     if can_claim:
                         lock_result = self.locks_manager.claim(child_id)
                         if json_mode:
-                            output({
-                                "ok": True,
-                                "task_id": child_id,
-                                "parent_id": task_id,
-                                "message": f"Created and claimed first subtask {child_id}",
-                                "all_subtasks": [c.get("id") for c in children],
-                            }, json_mode)
+                            output(
+                                {
+                                    "ok": True,
+                                    "task_id": child_id,
+                                    "parent_id": task_id,
+                                    "message": f"Created and claimed first subtask {child_id}",
+                                    "all_subtasks": [c.get("id") for c in children],
+                                },
+                                json_mode,
+                            )
                         else:
                             print(f"✅ 任务已创建并拆分")
                             print(f"📋 父任务: {task_id}")
@@ -705,7 +711,14 @@ class LRACLI:
                 return
             lock_result = self.locks_manager.claim(task_id)
             if json_mode:
-                output({"ok": True, "task_id": task_id, "message": "Created and claimed (auto-split skipped)"}, json_mode)
+                output(
+                    {
+                        "ok": True,
+                        "task_id": task_id,
+                        "message": "Created and claimed (auto-split skipped)",
+                    },
+                    json_mode,
+                )
             else:
                 print(f"✅ 任务已创建并认领: {task_id}")
         else:
@@ -716,7 +729,9 @@ class LRACLI:
                 return
             lock_result = self.locks_manager.claim(task_id)
             if json_mode:
-                output({"ok": True, "task_id": task_id, "message": "Created and claimed"}, json_mode)
+                output(
+                    {"ok": True, "task_id": task_id, "message": "Created and claimed"}, json_mode
+                )
             else:
                 print(f"✅ 任务已创建并认领: {task_id}")
                 print(f"💡 下一步: lra set {task_id} in_progress")
@@ -909,15 +924,23 @@ class LRACLI:
 
         failed_items = []
         if not quality_checks.get("tests_passed"):
-            test_issues = [i for i in issues if isinstance(i, dict) and i.get("type") == "test_failure"]
+            test_issues = [
+                i for i in issues if isinstance(i, dict) and i.get("type") == "test_failure"
+            ]
             if test_issues:
                 failed_items.append(("测试", test_issues))
         if not quality_checks.get("lint_passed"):
-            lint_issues = [i for i in issues if isinstance(i, dict) and i.get("type") == "lint_error"]
+            lint_issues = [
+                i for i in issues if isinstance(i, dict) and i.get("type") == "lint_error"
+            ]
             if lint_issues:
                 failed_items.append(("Lint", lint_issues))
         if not quality_checks.get("acceptance_met"):
-            acceptance_issues = [i for i in issues if isinstance(i, dict) and i.get("type") == "acceptance_incomplete"]
+            acceptance_issues = [
+                i
+                for i in issues
+                if isinstance(i, dict) and i.get("type") == "acceptance_incomplete"
+            ]
             if acceptance_issues:
                 failed_items.append(("验收", acceptance_issues))
 
@@ -993,14 +1016,14 @@ class LRACLI:
                 "task_id": task_id,
                 "current": current_status,
                 "target": status,
-                "available": ', '.join(available_transitions) if available_transitions else '无',
-                "first_valid": available_transitions[0] if available_transitions else '',
+                "available": ", ".join(available_transitions) if available_transitions else "无",
+                "first_valid": available_transitions[0] if available_transitions else "",
                 "template": template,
             }
             err = get_error_with_action("invalid_transition", err_ctx)
             print(f"❌ {err['message']}")
             print(f"💡 建议: {err['action']}")
-            if err.get('hint'):
+            if err.get("hint"):
                 print(f"   原因: {err['hint']}")
             return
 
@@ -1032,7 +1055,7 @@ class LRACLI:
 
                 err_ctx = {
                     "task_id": task_id,
-                    "failures": '; '.join(failures[:3]),
+                    "failures": "; ".join(failures[:3]),
                 }
                 err = get_error_with_action("constitution_failed", err_ctx)
 
@@ -1054,7 +1077,7 @@ class LRACLI:
 
                 err_ctx = {
                     "task_id": task_id,
-                    "failures": '; '.join(failures),
+                    "failures": "; ".join(failures),
                 }
                 err = get_error_with_action("constitution_non_negotiable", err_ctx)
 
@@ -1245,7 +1268,11 @@ class LRACLI:
                     status = "✅" if gr["passed"] else "❌"
                     print(f"   {status} {gr['name']}: {gr.get('description', '')}")
                     if gr.get("output"):
-                        output_preview = gr["output"][:100] + "..." if len(gr.get("output", "")) > 100 else gr.get("output", "")
+                        output_preview = (
+                            gr["output"][:100] + "..."
+                            if len(gr.get("output", "")) > 100
+                            else gr.get("output", "")
+                        )
                         if output_preview.strip():
                             print(f"      输出: {output_preview}")
                 print()
@@ -2757,8 +2784,10 @@ def main():
         help="Task priority: P0/P1/P2/P3 (default: P1)",
     )
     create_p.add_argument(
-        "--output-req", "--context-hint", default="8k",
-        help="Output size hint: 4k/8k/16k/32k/128k (default: 8k). --output-req is deprecated."
+        "--output-req",
+        "--context-hint",
+        default="8k",
+        help="Output size hint: 4k/8k/16k/32k/128k (default: 8k). --output-req is deprecated.",
     )
     create_p.add_argument("--parent", default=None, help="Parent task ID for subtasks")
     create_p.add_argument(
@@ -3102,7 +3131,15 @@ Examples:
 """,
     )
     new_p.add_argument("description", help="Task description")
-    new_p.add_argument("--auto-split", action="store_true", help="Auto decompose and split before claiming")
+    new_p.add_argument(
+        "--auto-split", action="store_true", help="Auto decompose and split before claiming"
+    )
+    new_p.add_argument(
+        "--variables",
+        type=str,
+        default=None,
+        help="Task variables as JSON (e.g., '{\"deliverables\":[\"src/x.py\"]}')",
+    )
 
     args = parser.parse_args()
     json_mode = getattr(args, "json", False)
@@ -3245,7 +3282,8 @@ Examples:
         cli.cmd_quality_check(getattr(args, "task_id", None), args.report, json_mode)
 
     elif args.command == "new":
-        cli.cmd_new(args.description, args.auto_split, json_mode)
+        vars = parse_variables(args.variables) if args.variables else None
+        cli.cmd_new(args.description, args.auto_split, vars, json_mode)
     elif args.command == "start":
         cli.cmd_start(args.task_desc, args.name, args.auto, json_mode)
     else:

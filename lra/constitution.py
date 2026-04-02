@@ -110,10 +110,10 @@ class ConstitutionManager:
                         "check_func": "check_deliverables_exist",
                         "check_level": "basic",  # v6.0: check file is not empty and has code patterns
                         "required": True,
-                        "description": "检查 deliverables 中的文件是否存在且包含代码"
+                        "description": "检查 deliverables 中的文件是否存在且包含代码",
                     }
                 ],
-            }
+            },
         ],
         "template_gates": {},
         "amendments": [],
@@ -512,9 +512,7 @@ class GateEvaluator:
 
         if not os.path.exists(task_path):
             return GateResult(
-                passed=False,
-                gate_name="deliverables_exist",
-                message=f"任务文件不存在: {task_path}"
+                passed=False, gate_name="deliverables_exist", message=f"任务文件不存在: {task_path}"
             )
 
         try:
@@ -587,43 +585,60 @@ class GateEvaluator:
                     passed=False,
                     gate_name="deliverables_exist",
                     message=f"交付物问题: {'; '.join(error_msg)}",
-                    output=f"存在的文件: {', '.join(existing_files) if existing_files else '无'}"
+                    output=f"存在的文件: {', '.join(existing_files) if existing_files else '无'}",
                 )
 
             return GateResult(
                 passed=True,
                 gate_name="deliverables_exist",
-                message=f"所有交付物文件已创建 ({len(existing_files)} 个)" +
-                        (f", 内容检查通过 ({check_level})" if check_level != "none" else ""),
-                output=f"交付物: {', '.join(existing_files)}"
+                message=f"所有交付物文件已创建 ({len(existing_files)} 个)"
+                + (f", 内容检查通过 ({check_level})" if check_level != "none" else ""),
+                output=f"交付物: {', '.join(existing_files)}",
             )
 
         except Exception as e:
             return GateResult(
-                passed=False,
-                gate_name="deliverables_exist",
-                message=f"检查交付物时异常: {str(e)}"
+                passed=False, gate_name="deliverables_exist", message=f"检查交付物时异常: {str(e)}"
             )
 
     def _is_code_file(self, filepath: str) -> bool:
         """检查文件是否是代码文件"""
-        code_extensions = {".py", ".js", ".ts", ".jsx", ".tsx", ".go", ".java",
-                          ".cpp", ".c", ".h", ".hpp", ".rs", ".rb", ".php",
-                          ".cs", ".swift", ".kt", ".scala", ".lua", ".sh"}
+        code_extensions = {
+            ".py",
+            ".js",
+            ".ts",
+            ".jsx",
+            ".tsx",
+            ".go",
+            ".java",
+            ".cpp",
+            ".c",
+            ".h",
+            ".hpp",
+            ".rs",
+            ".rb",
+            ".php",
+            ".cs",
+            ".swift",
+            ".kt",
+            ".scala",
+            ".lua",
+            ".sh",
+        }
         return Path(filepath).suffix in code_extensions
 
     def _has_basic_code_patterns(self, content: str) -> bool:
         """检查内容是否包含基本代码模式"""
         patterns = [
-            r"^(import|from)\s+",      # Python imports
+            r"^(import|from)\s+",  # Python imports
             r"^(export|const|let|var|function|class)\s+",  # JS/TS
-            r"^def\s+",                 # Python function
-            r"^class\s+",              # Class definition
-            r"^func\s+",               # Go function
-            r"^fn\s+",                 # Rust function
-            r"^public\s+",             # Java public
-            r"^private\s+",            # Java private
-            r"^package\s+",            # Java package
+            r"^def\s+",  # Python function
+            r"^class\s+",  # Class definition
+            r"^func\s+",  # Go function
+            r"^fn\s+",  # Rust function
+            r"^public\s+",  # Java public
+            r"^private\s+",  # Java private
+            r"^package\s+",  # Java package
         ]
         # Check for actual code patterns (not just comments)
         for pattern in patterns:
@@ -759,7 +774,7 @@ def create_default_constitution(project_name: str = "My Project") -> Dict[str, A
                         "check_func": "check_deliverables_exist",
                         "check_level": "basic",  # v6.0: check file is not empty and has code patterns
                         "required": True,
-                        "description": "检查 deliverables 中的文件是否存在且包含代码"
+                        "description": "检查 deliverables 中的文件是否存在且包含代码",
                     }
                 ],
             },
