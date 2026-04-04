@@ -2911,14 +2911,6 @@ Recommended workflow:
     record_show_p.add_argument("feature_id")
     record_show_p.add_argument("--limit", type=int, default=10)
 
-    # record timeline
-    record_timeline_p = record_sub.add_parser("timeline", help="Show feature timeline")
-    record_timeline_p.add_argument("feature_id")
-
-    # record analyze
-    record_analyze_p = record_sub.add_parser("analyze", help="Analyze feature changes")
-    record_analyze_p.add_argument("feature_id")
-
     # template
     template_p = subparsers.add_parser("template", help="Template management")
     template_sub = template_p.add_subparsers(dest="template_cmd")
@@ -2991,20 +2983,16 @@ Recommended workflow:
         help="Auto acquire batch lock",
     )
     batch_claim_p.add_argument("--wait", action="store_true", help="Wait for lock if held")
-    # search
-    search_p = subparsers.add_parser("search", help="Search tasks")
-    search_p.add_argument("query")
-    search_p.add_argument("--status", help="Filter by status")
 
-    # batch-lock
-    bl_p = subparsers.add_parser("batch-lock", help="Batch lock management")
-    bl_sub = bl_p.add_subparsers(dest="batch_lock_cmd")
+    # batch lock (formerly batch-lock)
+    batch_lock_p = batch_sub.add_parser("lock", help="Batch lock management")
+    batch_lock_sub = batch_lock_p.add_subparsers(dest="batch_lock_cmd")
 
-    # batch-lock status
-    bl_sub.add_parser("status")
+    # batch lock status
+    batch_lock_sub.add_parser("status")
 
-    # batch-lock acquire
-    bl_acquire = bl_sub.add_parser("acquire", help="Acquire batch lock")
+    # batch lock acquire
+    bl_acquire = batch_lock_sub.add_parser("acquire", help="Acquire batch lock")
     bl_acquire.add_argument(
         "--operation", required=True, choices=["batch_claim", "batch_set", "batch_delete"]
     )
@@ -3015,19 +3003,24 @@ Recommended workflow:
         "--max-wait", type=int, default=60000, dest="max_wait", help="Max wait time in ms"
     )
 
-    # batch-lock release
-    bl_sub.add_parser("release")
+    # batch lock release
+    batch_lock_sub.add_parser("release")
 
-    # batch-lock heartbeat
-    bl_heartbeat = bl_sub.add_parser("heartbeat", help="Extend lock timeout")
+    # batch lock heartbeat
+    bl_heartbeat = batch_lock_sub.add_parser("heartbeat", help="Extend lock timeout")
     bl_heartbeat.add_argument("--extend", type=int, default=30000, help="Extend timeout in ms")
 
-    # batch-lock recover
-    bl_sub.add_parser("recover", help="Recover expired lock")
+    # batch lock recover
+    batch_lock_sub.add_parser("recover", help="Recover expired lock")
 
-    # batch-lock logs
-    bl_logs = bl_sub.add_parser("logs", help="View operation logs")
+    # batch lock logs
+    bl_logs = batch_lock_sub.add_parser("logs", help="View operation logs")
     bl_logs.add_argument("--limit", type=int, default=20, help="Number of logs to show")
+
+    # search
+    search_p = subparsers.add_parser("search", help="Search tasks")
+    search_p.add_argument("query")
+    search_p.add_argument("--status", help="Filter by status")
 
     # v3.3.0: system-check
     sc_p = subparsers.add_parser("system-check", help="System check and preflight")
@@ -3037,44 +3030,45 @@ Recommended workflow:
         "--force", action="store_true", help="Force full analysis mode (ignore thresholds)"
     )
 
-    # v3.3.0: analyze-module
-    am_p = subparsers.add_parser("analyze-module", help="Analyze specific module code structure")
-    am_p.add_argument("module_name", help="Module name to analyze")
-    am_p.add_argument("--output-doc", action="store_true", help="Generate module documentation")
-
-    # v3.3.0: analyze-project
-    ap_p = subparsers.add_parser(
-        "analyze-project",
-        help="Analyze entire project structure",
-        description="Analyze project code structure, generate documentation and agent index. "
-        "Creates MODULES.md and index.json for fast code navigation.",
+    # analyze (merged from analyze-module and analyze-project)
+    analyze_p = subparsers.add_parser(
+        "analyze",
+        help="Analyze project or module structure",
+        description="Analyze project code structure or specific module. "
+        "Creates documentation and agent index for fast code navigation.",
     )
-    ap_p.add_argument("--output-dir", default="docs", help="Documentation output directory")
-    ap_p.add_argument(
+    analyze_sub = analyze_p.add_subparsers(dest="analyze_cmd")
+
+    # analyze project
+    analyze_proj_p = analyze_sub.add_parser("project", help="Analyze entire project structure")
+    analyze_proj_p.add_argument("--output-dir", default="docs", help="Documentation output directory")
+    analyze_proj_p.add_argument(
         "--create-tasks",
         action="store_true",
         default=True,
         dest="create_tasks",
         help="Create module analysis tasks (default)",
     )
-    ap_p.add_argument(
+    analyze_proj_p.add_argument(
         "--no-create-tasks",
         action="store_false",
         dest="create_tasks",
         help="Do not create tasks",
     )
-    ap_p.add_argument(
+    analyze_proj_p.add_argument(
         "--force",
         action="store_true",
         help="Force re-analysis even if analysis already exists",
     )
 
-    # v3.4.0: where - 显示文件位置
-    subparsers.add_parser("where", help="Show key file locations")
+    # analyze <module_name>
+    analyze_mod_p = analyze_sub.add_parser("module", help="Analyze specific module")
+    analyze_mod_p.add_argument("module_name", help="Module name to analyze")
+    analyze_mod_p.add_argument("--output-doc", action="store_true", help="Generate module documentation")
 
-    # v3.4.0: index - 输出 Agent 索引
-    idx_p = subparsers.add_parser("index", help="Output agent index path or content")
-    idx_p.add_argument("--content", action="store_true", help="Output full index content")
+    # where (merged with index)
+    where_p = subparsers.add_parser("where", help="Show key file locations")
+    where_p.add_argument("--index", action="store_true", help="Output agent index content")
 
     # v3.3.0: status-guide
     subparsers.add_parser("status-guide", help="Show state transition guide for all templates")
@@ -3092,23 +3086,27 @@ Recommended workflow:
         "orientation", help="Agent context reconstruction protocol - 快速了解项目状态"
     )
 
-    # regression-test - 回归测试
-    regression_p = subparsers.add_parser("regression-test", help="Run regression tests")
-    regression_p.add_argument("task_id", nargs="?", help="Task ID (optional)")
-    regression_p.add_argument("--template", help="Template filter")
-    regression_p.add_argument("--report", action="store_true", help="Show test report")
+    # test (merged from quality-check, regression-test, browser-test)
+    test_p = subparsers.add_parser("test", help="Run tests (quality/regression/browser)")
+    test_sub = test_p.add_subparsers(dest="test_cmd")
 
-    # browser-test - 浏览器自动化测试
-    browser_p = subparsers.add_parser("browser-test", help="Browser automation testing")
-    browser_p.add_argument("task_id", nargs="?", help="Task ID (optional)")
-    browser_p.add_argument(
+    # test quality
+    test_quality_p = test_sub.add_parser("quality", help="Code quality check")
+    test_quality_p.add_argument("task_id", nargs="?", help="Task ID (optional)")
+    test_quality_p.add_argument("--report", action="store_true", help="Show quality report")
+
+    # test regression
+    test_reg_p = test_sub.add_parser("regression", help="Run regression tests")
+    test_reg_p.add_argument("task_id", nargs="?", help="Task ID (optional)")
+    test_reg_p.add_argument("--template", help="Template filter")
+    test_reg_p.add_argument("--report", action="store_true", help="Show test report")
+
+    # test browser
+    test_browser_p = test_sub.add_parser("browser", help="Browser automation testing")
+    test_browser_p.add_argument("task_id", nargs="?", help="Task ID (optional)")
+    test_browser_p.add_argument(
         "--script", action="store_true", dest="generate_script", help="Generate test script"
     )
-
-    # quality-check - 代码质量检查
-    quality_p = subparsers.add_parser("quality-check", help="Code quality check")
-    quality_p.add_argument("task_id", nargs="?", help="Task ID (optional)")
-    quality_p.add_argument("--report", action="store_true", help="Show quality report")
 
     # v3.4.1: start - 智能启动
     start_p = subparsers.add_parser(
@@ -3219,42 +3217,46 @@ Examples:
             cli.cmd_batch("delete", None, args.task_ids, args.auto_lock, args.wait, json_mode)
         elif args.batch_cmd == "claim":
             cli.cmd_batch("claim", None, args.task_ids, args.auto_lock, args.wait, json_mode)
+        elif args.batch_cmd == "lock":
+            if args.batch_lock_cmd == "status":
+                cli.cmd_batch_lock_status(json_mode)
+            elif args.batch_lock_cmd == "acquire":
+                cli.cmd_batch_lock_acquire(
+                    args.operation, args.tasks, args.timeout, args.wait, json_mode
+                )
+            elif args.batch_lock_cmd == "release":
+                cli.cmd_batch_lock_release(json_mode)
+            elif args.batch_lock_cmd == "heartbeat":
+                cli.cmd_batch_lock_heartbeat(args.extend, json_mode)
+            elif args.batch_lock_cmd == "recover":
+                cli.cmd_batch_lock_recover(json_mode)
+            elif args.batch_lock_cmd == "logs":
+                cli.cmd_batch_lock_logs(args.limit, json_mode)
+            else:
+                batch_lock_p.print_help()
         else:
             batch_p.print_help()
-    elif args.command == "batch-lock":
-        if args.batch_lock_cmd == "status":
-            cli.cmd_batch_lock_status(json_mode)
-        elif args.batch_lock_cmd == "acquire":
-            cli.cmd_batch_lock_acquire(
-                args.operation, args.tasks, args.timeout, args.wait, json_mode
-            )
-        elif args.batch_lock_cmd == "release":
-            cli.cmd_batch_lock_release(json_mode)
-        elif args.batch_lock_cmd == "heartbeat":
-            cli.cmd_batch_lock_heartbeat(args.extend, json_mode)
-        elif args.batch_lock_cmd == "recover":
-            cli.cmd_batch_lock_recover(json_mode)
-        elif args.batch_lock_cmd == "logs":
-            cli.cmd_batch_lock_logs(args.limit, json_mode)
-        else:
-            bl_p.print_help()
     elif args.command == "search":
         cli.cmd_search(args.query, args.status, json_mode)
     elif args.command == "system-check":
         cli.cmd_system_check(args.full, args.report, args.force, json_mode)
-    elif args.command == "analyze-module":
-        cli.cmd_analyze_module(args.module_name, getattr(args, "output_doc", False), json_mode)
-    elif args.command == "analyze-project":
-        cli.cmd_analyze_project(
-            getattr(args, "output_dir", None),
-            getattr(args, "create_tasks", True),
-            getattr(args, "force", False),
-            json_mode,
-        )
+    elif args.command == "analyze":
+        if args.analyze_cmd == "project":
+            cli.cmd_analyze_project(
+                getattr(args, "output_dir", None),
+                getattr(args, "create_tasks", True),
+                getattr(args, "force", False),
+                json_mode,
+            )
+        elif args.analyze_cmd == "module":
+            cli.cmd_analyze_module(args.module_name, getattr(args, "output_doc", False), json_mode)
+        else:
+            analyze_p.print_help()
     elif args.command == "where":
-        cli.cmd_where(json_mode)
-    elif args.command == "index":
-        cli.cmd_index(getattr(args, "content", False), json_mode)
+        if getattr(args, "index", False):
+            cli.cmd_index(True, json_mode)
+        else:
+            cli.cmd_where(json_mode)
     elif args.command == "status-guide":
         cli.cmd_status_guide(json_mode)
     elif args.command == "recover":
@@ -3268,18 +3270,19 @@ Examples:
     elif args.command == "orientation":
         cli.cmd_orientation(json_mode)
 
-    elif args.command == "regression-test":
-        cli.cmd_regression_test(
-            getattr(args, "task_id", None), getattr(args, "template", None), args.report, json_mode
-        )
-
-    elif args.command == "browser-test":
-        cli.cmd_browser_test(
-            getattr(args, "task_id", None), getattr(args, "generate_script", False), json_mode
-        )
-
-    elif args.command == "quality-check":
-        cli.cmd_quality_check(getattr(args, "task_id", None), args.report, json_mode)
+    elif args.command == "test":
+        if args.test_cmd == "quality":
+            cli.cmd_quality_check(getattr(args, "task_id", None), args.report, json_mode)
+        elif args.test_cmd == "regression":
+            cli.cmd_regression_test(
+                getattr(args, "task_id", None), getattr(args, "template", None), args.report, json_mode
+            )
+        elif args.test_cmd == "browser":
+            cli.cmd_browser_test(
+                getattr(args, "task_id", None), getattr(args, "generate_script", False), json_mode
+            )
+        else:
+            test_p.print_help()
 
     elif args.command == "new":
         vars = parse_variables(args.variables) if args.variables else None
