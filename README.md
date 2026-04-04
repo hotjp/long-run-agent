@@ -243,9 +243,9 @@ lra set task_001 force_next_stage  # 强制进入下一阶段
 
 | 命令 | 用途 |
 |------|------|
-| `lra analyze-project` | 分析整个项目结构，生成文档和索引 |
-| `lra analyze-module <name>` | 分析指定模块代码 |
-| `lra analyze-module <name> --output-doc` | 分析模块并生成文档 |
+| `lra analyze project` | 分析整个项目结构，生成文档和索引 |
+| `lra analyze module <name>` | 分析指定模块代码 |
+| `lra analyze module <name> --output-doc` | 分析模块并生成文档 |
 | `lra system-check` | 执行系统预检 |
 | `lra system-check --report` | 查看预检报告 |
 
@@ -254,8 +254,7 @@ lra set task_001 force_next_stage  # 强制进入下一阶段
 | 命令 | 用途 |
 |------|------|
 | `lra where` | 显示所有关键文件位置 |
-| `lra index` | 输出 Agent 索引文件路径 |
-| `lra index --content` | 输出完整索引内容（JSON） |
+| `lra where --index` | 输出完整索引内容（JSON） |
 
 ### 锁命令
 
@@ -266,6 +265,8 @@ lra set task_001 force_next_stage  # 强制进入下一阶段
 | `lra pause <id>` | 暂停并保存快照 |
 | `lra resume <id>` | 查看快照 |
 | `lra heartbeat <id>` | 心跳保活（每5分钟） |
+| `lra batch lock status` | 查看批量锁状态 |
+| `lra batch lock acquire` | 获取批量锁 |
 
 ### 模板命令
 
@@ -448,22 +449,22 @@ lra system-check --full
 lra system-check --force
 
 # 分析指定模块（代码结构分析）
-lra analyze-module QAFetch
+lra analyze module QAFetch
 
 # 分析模块并生成文档
-lra analyze-module QAFetch --output-doc
+lra analyze module QAFetch --output-doc
 
 # 分析整个项目
-lra analyze-project
+lra analyze project
 
 # 分析项目并生成文档到指定目录
-lra analyze-project --output-dir docs
+lra analyze project --output-dir docs
 
 # 强制重新分析
-lra analyze-project --force
+lra analyze project --force
 
 # 分析项目但不创建任务
-lra analyze-project --no-create-tasks
+lra analyze project --no-create-tasks
 ```
 
 ### 项目分析器
@@ -512,19 +513,19 @@ v3.4.0 新增**项目代码分析器**，支持多语言项目结构分析：
 lra init --name MyProject
 
 # 执行完整项目分析
-lra analyze-project
+lra analyze project
 
 # 查看 Agent 索引位置
 lra where
 
 # 输出索引内容（JSON）
-lra index --content
+lra where --index
 
 # 查看模块详情
-lra analyze-module payment --output-doc
+lra analyze module payment --output-doc
 
 # 强制重新分析
-lra analyze-project --force
+lra analyze project --force
 ```
 
 ### 文档闭环
@@ -635,33 +636,33 @@ v5.0 新增了完整的质量保障系统，确保任务完成质量：
 
 ```bash
 # 运行回归测试
-lra regression-test
+lra test regression
 
 # 查看报告
-lra regression-test --report
+lra test regression --report
 
 # 测试特定模板
-lra regression-test --template code-module
+lra test regression --template code-module
 ```
 
 #### 3. 浏览器自动化测试
 
 ```bash
 # 检查任务验证状态
-lra browser-test task_001
+lra test browser task_001
 
 # 生成测试脚本
-lra browser-test task_001 --script
+lra test browser task_001 --script
 ```
 
 #### 4. 代码质量检查
 
 ```bash
 # 运行质量检查
-lra quality-check
+lra test quality
 
 # 查看报告
-lra quality-check --report
+lra test quality --report
 ```
 
 ### Agent 工作流优化
@@ -730,9 +731,9 @@ cat lra/prompts/agent_prompt.md
 |------|------|
 | `lra status` | 项目进度可视化 |
 | `lra orientation` | Agent上下文重建 |
-| `lra regression-test [--report]` | 回归测试 |
-| `lra browser-test <id> [--script]` | 浏览器自动化测试 |
-| `lra quality-check [--report]` | 代码质量检查 |
+| `lra test regression [--report]` | 回归测试 |
+| `lra test browser <id> [--script]` | 浏览器自动化测试 |
+| `lra test quality [--report]` | 代码质量检查 |
 
 ## 🆕 迭代阶段引导机制
 

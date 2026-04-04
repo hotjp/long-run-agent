@@ -2,6 +2,49 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.0.1] - 2026-04-02
+
+### 🔄 重构
+
+- **CLI 命令精简**：合并 `batch-lock` 到 `batch lock`，合并 `analyze-module/analyze-project` 到 `analyze {module|project}`，合并 `quality-check/regression-test/browser-test` 到 `test {quality|regression|browser}`，简化 `record` 命令（移除 timeline/analyze），`index` 并入 `where --index`。命令总数从 35+ 减少到 ~25。
+
+### ✨ 新增功能
+
+- **lra new 变量支持**：新增 `requirements`、`acceptance`、`design` 等字段支持，子任务名称更有意义
+- **统一解析器模块**：`lra/parsers.py` 提供统一的输入解析
+- **错误目录**：`lra/errors.py` 提供错误目录和操作建议
+- **统一状态转换**：使用统一的状态转换和可操作错误信息
+- **分解建议**：`lra decompose <id>` 分析任务并建议如何拆分
+- **自动拆分**：`lra split <id> --auto` 使用上一次 decompose 的建议自动拆分
+
+### 🐛 Bug 修复
+
+- 设置 `check_level=basic` 作为默认值，修复代码模式检测
+- 移除 `--context-hint` 的误导性弃用警告
+- 修复 `browser-test` 命令示例（添加缺失的 task_id 参数）
+- 移除未使用的 `format_error_display` 导入
+
+### 📚 文档更新
+
+- 文档更新报告
+- FOR_NEW_AGENT 更新
+- 添加 constitution 和 quality check 文档
+
+### 🔧 代码质量
+
+- ruff lint 错误修复
+
+## [5.0.0] - 2026-03-10
+
+### 🎉 重大版本发布
+
+- **Constitution 机制**：规范驱动开发 + 质量宪法 + 不可协商原则
+- **质量保障系统**：验证机制 + 回归测试 + 浏览器测试 + 代码质量检查
+- **Ralph Loop 迭代引导**：7 阶段渐进式优化 + 智能引导 + 安全检查
+- **跨平台支持**：Windows / Linux / macOS 全平台兼容
+- **进度可视化**：`lra status` 项目进度可视化
+- **上下文重建**：`lra orientation` Agent 上下文重建协议
+
 ## [4.1.0] - 2026-03-05
 
 ### ✨ 新增功能
