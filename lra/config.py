@@ -13,6 +13,7 @@ from datetime import datetime
 from filelock import FileLock as _FileLock
 
 CURRENT_VERSION = "5.0.0"
+LRA_VERSION = "5.0.0"
 SCHEMA_VERSION = "2026-02-25"
 
 
@@ -77,6 +78,7 @@ class Config:
     RECORDS_DIR = "records"
     RECORDS_INDEX_FILE = "index.json"
     BACKUP_DIR = "backup"
+    LRA_VERSION_FILE = ".lra_version"
 
     @classmethod
     def get_metadata_dir(cls) -> str:
@@ -126,6 +128,10 @@ class Config:
     @classmethod
     def get_backup_dir(cls) -> str:
         return os.path.join(cls.get_metadata_dir(), cls.BACKUP_DIR)
+
+    @classmethod
+    def get_lra_version_path(cls) -> str:
+        return os.path.join(cls.get_metadata_dir(), cls.LRA_VERSION_FILE)
 
     @classmethod
     def ensure_dirs(cls) -> None:
@@ -286,3 +292,20 @@ def validate_project_initialized() -> Tuple[bool, str]:
     if not os.path.exists(Config.get_task_list_path()):
         return False, "not_initialized"
     return True, "ok"
+
+
+def is_initialized() -> bool:
+    """Check if project is initialized (simpler version of validate_project_initialized)."""
+    return os.path.exists(Config.get_task_list_path())
+
+
+def check_existing_data(path: str) -> int:
+    """Returns task count if initialized, 0 otherwise."""
+    from lra.task_manager import TaskManager
+
+    tm = TaskManager()
+    data = tm._load()
+    if not data:
+        return 0
+    tasks = data.get("tasks", [])
+    return len(tasks)

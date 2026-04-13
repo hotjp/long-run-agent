@@ -367,7 +367,11 @@ class TaskManager:
                 current = t.get("status", "pending")
 
                 # 🆕 Constitution强制验证 - 在completed状态时自动检查
-                if status in ["completed", "truly_completed"] and not force:
+                # 检查配置：enforcement 为 disabled 时跳过验证
+                config = self._load_config()
+                constitution_enforcement = config.get("constitution", {}).get("enforcement", "disabled")
+
+                if status in ["completed", "truly_completed"] and not force and constitution_enforcement == "enabled":
                     constitution_result = self._validate_constitution(task_id, t, template)
                     if not constitution_result["passed"]:
                         # Constitution验证失败，自动进入optimizing状态
@@ -412,14 +416,15 @@ class TaskManager:
 
                     # optimizing -> truly_completed (质量检查通过 + Constitution验证)
                     elif current_real_status == "optimizing" and status == "truly_completed":
-                        # 🆕 先验证Constitution
-                        constitution_result = self._validate_constitution(task_id, t, template)
-                        if not constitution_result["passed"]:
-                            # Constitution验证失败，继续迭代
-                            return (
-                                False,
-                                f"constitution_failed:{'; '.join(constitution_result.get('failures', []))}",
-                            )
+                        # 🆕 先验证Constitution (如果启用)
+                        if constitution_enforcement == "enabled":
+                            constitution_result = self._validate_constitution(task_id, t, template)
+                            if not constitution_result["passed"]:
+                                # Constitution验证失败，继续迭代
+                                return (
+                                    False,
+                                    f"constitution_failed:{'; '.join(constitution_result.get('failures', []))}",
+                                )
 
                         # 质量检查通过
                         if self._validate_quality_passed(t):
@@ -434,16 +439,17 @@ class TaskManager:
                     elif current_real_status == "optimizing" and status == "force_completed":
                         ralph_state = t.get("ralph", {})
                         if ralph_state.get("iteration", 0) >= ralph_state.get("max_iterations", 7):
-                            # 🆕 即使强制完成，也要检查NON_NEGOTIABLE原则
-                            constitution_result = self._validate_constitution(
-                                task_id, t, template, check_non_negotiable_only=True
-                            )
-                            if not constitution_result["passed"]:
-                                # NON_NEGOTIABLE原则不能违反
-                                return (
-                                    False,
-                                    f"constitution_non_negotiable_violation:{'; '.join(constitution_result.get('failures', []))}",
+                            # 🆕 即使强制完成，也要检查NON_NEGOTIABLE原则（如果启用）
+                            if constitution_enforcement == "enabled":
+                                constitution_result = self._validate_constitution(
+                                    task_id, t, template, check_non_negotiable_only=True
                                 )
+                                if not constitution_result["passed"]:
+                                    # NON_NEGOTIABLE原则不能违反
+                                    return (
+                                        False,
+                                        f"constitution_non_negotiable_violation:{'; '.join(constitution_result.get('failures', []))}",
+                                    )
 
                             t["status"] = status
                             t["updated_at"] = datetime.now().isoformat()
@@ -1258,6 +1264,12 @@ class TaskManager:
         if not task:
             return {"passed": True, "gates": []}
 
+        # 检查Constitution enforcement设置 - 如果禁用则跳过迭代门禁
+        config = self._load_config()
+        constitution_enforcement = config.get("constitution", {}).get("enforcement", "disabled")
+        if constitution_enforcement == "disabled":
+            return {"passed": True, "gates": []}
+
         manager = ConstitutionManager()
         evaluator = GateEvaluator()
 
@@ -1904,7 +1916,11 @@ class TaskManager:
                 ("代码审查", "完成代码 review 和优化"),
             ]
             for i in range(count):
-                stage_name, stage_req = generic_stages[i] if i < len(generic_stages) else (f"阶段{i + 1}", f"完成第 {i + 1} 部分工作")
+                stage_name, stage_req = (
+                    generic_stages[i]
+                    if i < len(generic_stages)
+                    else (f"阶段{i + 1}", f"完成第 {i + 1} 部分工作")
+                )
                 subtask_patterns.append(
                     {
                         "desc": stage_name,
@@ -1949,3 +1965,233 @@ class TaskManager:
             if task:
                 return task.get("_decomposition_suggestion")
         return None
+
+    def get_ready_tasks(
+        self,
+        locks_manager=None,
+        sort: str = "priority",
+        limit: Optional[int] = None,
+        priority_filter: Optional[str] = None,
+        assignee_filter: Optional[str] = None,
+        unassigned_only: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """
+        Get tasks that are ready to work on.
+
+        A task is "ready" if:
+        - Status is NOT in (completed, truly_completed, force_completed)
+        - NOT locked by others
+        - NOT blocked by dependencies
+        - All parent dependencies are completed
+
+        Args:
+            locks_manager: Optional LocksManager instance to check locks
+            sort: "priority" (default) or "oldest"
+            limit: Maximum number of tasks to return
+            priority_filter: Only return tasks with this priority (e.g., "P1")
+            assignee_filter: Only return tasks assigned to this agent
+            unassigned_only: If True, only return unassigned tasks
+
+        Returns:
+            List of task dicts with id, title, priority, status, parent_id, blocked_by, assignee
+        """
+        from lra.locks_manager import LockStatus
+
+        data = self._load()
+        if not data:
+            return []
+
+        # Load locks if manager provided
+        locks = {}
+        if locks_manager:
+            locks = locks_manager.get_all_locks()
+
+        completed_statuses = {"completed", "truly_completed", "force_completed"}
+        ready_tasks = []
+
+        for task in data.get("tasks", []):
+            task_id = task.get("id", "")
+
+            # Skip completed tasks
+            if task.get("status") in completed_statuses:
+                continue
+
+            # Check if locked by others
+            lock = locks.get(task_id)
+            if lock:
+                lock_status = lock.get("status")
+                if lock_status == LockStatus.CLAIMED:
+                    # Check if it's not an orphan (orphaned locks can be claimed)
+                    if locks_manager and not locks_manager._check_orphan(lock):
+                        # Locked by someone else, skip unless assignee_filter matches
+                        if assignee_filter:
+                            session_id = lock.get("session_id", "")
+                            if assignee_filter not in session_id:
+                                continue
+                        elif unassigned_only:
+                            continue
+                    elif lock_status == LockStatus.LOCKED_BY_PARENT:
+                        continue
+
+            # Check if blocked by dependencies
+            dependencies = task.get("dependencies", [])
+            dependency_type = task.get("dependency_type", "all")
+            blocked_by = []
+
+            for dep_id in dependencies:
+                dep_task = self.get(dep_id)
+                if not dep_task:
+                    # Missing dependency task - consider it as blocking
+                    blocked_by.append({"id": dep_id, "reason": "task_not_found"})
+                    continue
+
+                dep_status = dep_task.get("status", "pending")
+                if dep_status not in completed_statuses:
+                    blocked_by.append(
+                        {
+                            "id": dep_id,
+                            "status": dep_status,
+                            "description": dep_task.get("description", "")[:50],
+                        }
+                    )
+
+            if dependency_type == "all" and blocked_by:
+                continue
+            elif dependency_type == "any" and len(blocked_by) == len(dependencies):
+                continue
+
+            # Check parent task dependencies (for parent tasks, ensure parent is completed)
+            parent_id = task.get("parent_id")
+            if parent_id:
+                parent_task = self.get(parent_id)
+                if parent_task and parent_task.get("status") not in completed_statuses:
+                    continue
+
+            # Apply priority filter
+            if priority_filter and task.get("priority") != priority_filter:
+                continue
+
+            # Build task info dict
+            task_info = {
+                "id": task_id,
+                "title": task.get("description", ""),
+                "priority": task.get("priority", "P1"),
+                "status": task.get("status", "pending"),
+                "parent_id": parent_id,
+                "blocked_by": blocked_by if blocked_by else None,
+                "assignee": None,
+            }
+
+            # Get assignee from lock
+            if lock and lock.get("status") == LockStatus.CLAIMED:
+                session_id = lock.get("session_id", "")
+                # Extract agent id from session_id (format: task_id_timestamp_uuid)
+                if "_" in session_id:
+                    task_part = session_id.split("_")[0]
+                    if task_part == task_id:
+                        # Full session_id is task_id_timestamp_uuid
+                        parts = session_id.split("_")
+                        if len(parts) >= 3:
+                            task_info["assignee"] = "_".join(parts[1:3])
+                        else:
+                            task_info["assignee"] = session_id
+                    else:
+                        task_info["assignee"] = session_id
+
+            # Apply assignee filters
+            if assignee_filter and task_info.get("assignee") != assignee_filter:
+                continue
+            if unassigned_only and task_info.get("assignee") is not None:
+                continue
+
+            ready_tasks.append(task_info)
+
+        # Sort
+        if sort == "oldest":
+            # Sort by created_at (oldest first)
+            ready_tasks.sort(key=lambda x: x.get("id", ""))
+
+            # Actually sort by task number for consistency
+            def task_sort_key(t):
+                task_id = t.get("id", "task_999")
+                # Extract number from task_id like "task_001" -> 1
+                parts = task_id.split("_")
+                if len(parts) >= 2:
+                    try:
+                        return int(parts[-1])
+                    except ValueError:
+                        pass
+                return 999
+
+            ready_tasks.sort(key=task_sort_key)
+        else:
+            # Sort by priority (P0 > P1 > P2 > P3)
+            priority_order = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
+            ready_tasks.sort(
+                key=lambda x: (priority_order.get(x.get("priority", "P1"), 1), x.get("id", ""))
+            )
+
+        # Apply limit
+        if limit:
+            ready_tasks = ready_tasks[:limit]
+
+        return ready_tasks
+
+    def get_blocked_tasks(self) -> List[Dict[str, Any]]:
+        """
+        Get all tasks that are blocked with reasons.
+
+        Returns:
+            List of blocked task dicts with id, description, blocked_by info
+        """
+        data = self._load()
+        if not data:
+            return []
+
+        blocked_tasks = []
+        completed_statuses = {"completed", "truly_completed", "force_completed"}
+
+        for task in data.get("tasks", []):
+            task_id = task.get("id", "")
+
+            # Check if blocked by dependencies
+            dependencies = task.get("dependencies", [])
+            dependency_type = task.get("dependency_type", "all")
+            blocking_deps = []
+
+            for dep_id in dependencies:
+                dep_task = self.get(dep_id)
+                if not dep_task:
+                    blocking_deps.append({"id": dep_id, "reason": "task_not_found"})
+                    continue
+
+                dep_status = dep_task.get("status", "pending")
+                if dep_status not in completed_statuses:
+                    blocking_deps.append(
+                        {
+                            "id": dep_id,
+                            "status": dep_status,
+                            "description": dep_task.get("description", "")[:50],
+                        }
+                    )
+
+            if dependency_type == "all" and blocking_deps:
+                blocked_tasks.append(
+                    {
+                        "id": task_id,
+                        "description": task.get("description", ""),
+                        "priority": task.get("priority", "P1"),
+                        "blocked_by": blocking_deps,
+                    }
+                )
+            elif dependency_type == "any" and len(blocking_deps) == len(dependencies):
+                blocked_tasks.append(
+                    {
+                        "id": task_id,
+                        "description": task.get("description", ""),
+                        "priority": task.get("priority", "P1"),
+                        "blocked_by": blocking_deps,
+                    }
+                )
+
+        return blocked_tasks

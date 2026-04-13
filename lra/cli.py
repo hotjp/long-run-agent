@@ -160,21 +160,110 @@ class LRACLI:
 
         return ok
 
-    def cmd_init(self, name: str, template: str, json_mode: bool = False):
+    def cmd_init(
+        self,
+        name: Optional[str],
+        template: str,
+        skip_agents: bool = False,
+        profile: str = "full",
+        force: bool = False,
+        destroy_token: Optional[str] = None,
+        quiet: bool = False,
+        json_mode: bool = False,
+    ):
+        from lra.config import LRA_VERSION, is_initialized, check_existing_data, Config
+
+        # Default name to current directory name
+        if not name:
+            name = os.path.basename(os.path.abspath(os.getcwd()))
+
+        # Check existing data BEFORE init
+        task_count = check_existing_data("") if is_initialized() else 0
+        already_initialized = task_count > 0
+
+        if already_initialized:
+            if not force:
+                if json_mode:
+                    output(
+                        {
+                            "ok": False,
+                            "message": "already_initialized",
+                            "task_count": task_count,
+                            "hint": "Use --force to re-initialize",
+                        },
+                        json_mode,
+                    )
+                    return
+                print(f"⚠️  项目已初始化 (.long-run-agent 存在)")
+                print(f"   现有任务: {task_count} 个")
+                print(f"   使用 --force 重新初始化（会销毁现有数据）")
+                return
+
+            # Force re-initialization - safety confirmation
+            if json_mode:
+                # In json mode without destroy-token, fail
+                if not destroy_token:
+                    output(
+                        {
+                            "ok": False,
+                            "message": "destroy_token_required",
+                            "hint": "Use --destroy-token=DESTROY-<name> to confirm",
+                        },
+                        json_mode,
+                    )
+                    return
+                expected_token = f"DESTROY-{name}"
+                if destroy_token != expected_token:
+                    output(
+                        {
+                            "ok": False,
+                            "message": "invalid_destroy_token",
+                            "hint": f"Expected: {expected_token}",
+                        },
+                        json_mode,
+                    )
+                    return
+            else:
+                # Interactive mode
+                print(f"⚠️  WARNING: 重新初始化将销毁现有数据库")
+                print(f"   现有任务: {task_count} 个")
+                confirm = input(f"请输入 'destroy {task_count} tasks' 以确认: ")
+                if confirm != f"destroy {task_count} tasks":
+                    print("取消初始化。")
+                    return
+
+        # Proceed with initialization
         success, msg = self.task_manager.init_project(name, template)
 
         if json_mode:
             output({"ok": success, "message": msg}, json_mode)
             return
 
-        if success:
+        if not success:
+            print(f"❌ 初始化失败: {msg}")
+            return
+
+        # Create .lra_version file
+        try:
+            from datetime import datetime as dt
+
+            version_path = Config.get_lra_version_path()
+            version_content = (
+                f"LRA_VERSION={LRA_VERSION}\n"
+                f"INITIALIZED={dt.now().strftime('%Y-%m-%dT%H:%M:%SZ')}\n"
+            )
+            with open(version_path, "w") as f:
+                f.write(version_content)
+        except Exception:
+            pass  # Non-fatal
+
+        if not quiet:
             print(f"✅ 项目已初始化：{name}\n")
             print(f"默认模板：{template}")
             print(f"\n📋 下一步:")
-            print(f"   lra analyze-project        # 生成项目文档（推荐）")
+            print(f"   lra ready                  # 查看可用任务（推荐）")
             print(f"   lra context                # 查看项目状态")
             print(f'   lra create "任务描述"      # 创建第一个任务')
-            print(f"\n🤖 Agent 索引: .long-run-agent/analysis/index.json")
 
             # 🆕 自动创建Constitution
             from lra.constitution import init_constitution
@@ -183,6 +272,195 @@ class LRACLI:
             success, msg = init_constitution(name)
             if success:
                 print(f"\n{NextStepGuide.after_init(name)}")
+
+            # 🆕 复制AGENTS.md到项目根目录
+            if not skip_agents:
+                self._copy_agents_template(profile)
+        else:
+            # Quiet mode - minimal output
+            print(f"Initialized: {name}")
+
+    def _copy_agents_template(self, profile: str = "full"):
+        """
+        创建/更新 agent 指南文件
+
+        逻辑：
+        - lra.md: 不存在则创建，存在则只更新 LRA section
+        - agent.md: 不存在则创建，存在但无 LRA section 则更新
+        - CLAUDE.md: 不存在则创建，存在但无 LRA section 则更新
+        """
+        import shutil
+
+        lra_dir = os.path.dirname(os.path.abspath(__file__))
+        templates_dir = os.path.join(lra_dir, "templates", "agents", "defaults")
+        dst_dir = os.getcwd()
+
+        # 1. lra.md (LRA 专用) - 存在则更新 section
+        lra_dst = os.path.join(dst_dir, "lra.md")
+
+        # 检查现有 profile，防止降级
+        if os.path.exists(lra_dst):
+            existing_profile = self._get_profile_from_section(lra_dst, "BEGIN LRA INTEGRATION")
+            if existing_profile == "full" and profile == "minimal":
+                print(f"\n⚠️  已存在 full profile 的 lra.md，不会降级为 minimal")
+                # 仍然创建 agent.md 和 CLAUDE.md
+                self._copy_agent_and_claude(agent_dst, claude_dst, templates_dir, dst_dir)
+                return
+
+        lra_src = os.path.join(templates_dir, f"lra-{profile}.md")
+        if not os.path.exists(lra_src):
+            lra_src = os.path.join(templates_dir, "lra-full.md")
+        self._update_or_create(lra_dst, lra_src, "BEGIN LRA INTEGRATION", allow_replace=True)
+
+        # 2. agent.md 和 CLAUDE.md
+        self._copy_agent_and_claude(agent_dst, claude_dst, templates_dir, dst_dir)
+
+        print(f"\n📄 Agent 指南已创建: lra.md, agent.md, CLAUDE.md")
+
+    def _copy_agent_and_claude(self, agent_dst, claude_dst, templates_dir, dst_dir):
+        """复制 agent.md 和 CLAUDE.md"""
+        # agent.md (通用入口) - 不存在则创建，存在但无 LRA section 则更新
+        agent_dst = os.path.join(dst_dir, "agent.md")
+        self._update_or_create(
+            agent_dst,
+            os.path.join(templates_dir, "agent.md"),
+            "BEGIN LRA AGENT SECTION",
+            allow_replace=False
+        )
+
+        # CLAUDE.md - 不存在则创建，存在但无 LRA section 则更新
+        claude_dst = os.path.join(dst_dir, "CLAUDE.md")
+        self._update_or_create(
+            claude_dst,
+            os.path.join(templates_dir, "claude.md"),
+            "BEGIN LRA CLAUDE SECTION",
+            allow_replace=False
+        )
+
+    def _get_profile_from_section(self, file_path: str, section_marker: str) -> str:
+        """
+        从现有 section 中提取 profile
+
+        Args:
+            file_path: 文件路径
+            section_marker: section 标记（如 "BEGIN LRA INTEGRATION"）
+
+        Returns:
+            profile 名称（"minimal" 或 "full"），未找到返回 None
+        """
+        import re
+
+        if not os.path.exists(file_path):
+            return None
+
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # 从 BEGIN 行中查找 profile 标记
+        begin_line_pattern = rf'<!-- {re.escape(section_marker)}[^>]*profile:\s*(\w+)'
+        profile_match = re.search(begin_line_pattern, content)
+        if profile_match:
+            return profile_match.group(1)
+
+        # 如果 BEGIN 行没有 profile，从内容推断
+        # 提取 section 内容
+        end_marker = section_marker.replace("BEGIN ", "END ")
+        body_pattern = rf'<!-- {re.escape(section_marker)}[^>]*-->\n(.*?)<!-- {re.escape(end_marker)} -->'
+        body_match = re.search(body_pattern, content, re.DOTALL)
+        if body_match:
+            section_body = body_match.group(1)
+            if "Session Completion" in section_body or "完整命令参考" in section_body:
+                return "full"
+
+        return "minimal"
+
+    def _deduplicate_sections(self, content: str, section_marker: str) -> str:
+        """
+        清理重复的 section
+
+        Args:
+            content: 文件内容
+            section_marker: section 标记（如 "BEGIN LRA INTEGRATION"）
+
+        Returns:
+            清理后的内容
+        """
+        import re
+
+        # 正确生成 END marker（例如 BEGIN LRA INTEGRATION -> END LRA INTEGRATION）
+        end_marker = section_marker.replace("BEGIN ", "END ")
+        pattern = rf'(<!-- {re.escape(section_marker)}[^>]*-->\n.*?<!-- {re.escape(end_marker)} -->\n*)'
+        matches = re.findall(pattern, content, re.DOTALL)
+
+        if len(matches) <= 1:
+            return content
+
+        # 只保留最后一个
+        result = content
+        for _ in range(len(matches) - 1):
+            result = re.sub(pattern, '', result, count=1, flags=re.DOTALL)
+
+        return result.strip() + '\n'
+
+    def _update_or_create(self, dst: str, src: str, section_marker: str, allow_replace: bool = False):
+        """
+        增量更新: 只更新 section 标记内的内容
+
+        - 如果目标文件不存在: 直接复制
+        - 如果目标文件存在但没有 section 标记: 追加模板内容
+        - 如果目标文件存在且有 section 标记:
+            - allow_replace=True (lra.md): 替换 section 部分
+            - allow_replace=False (agent.md/CLAUDE.md): 保持不变
+        """
+        import re
+        import shutil
+
+        if not os.path.exists(dst):
+            shutil.copy2(src, dst)
+            return
+
+        with open(dst, 'r', encoding='utf-8') as f:
+            existing = f.read()
+
+        with open(src, 'r', encoding='utf-8') as f:
+            template = f.read()
+
+        # 如果没有 section 标记，追加
+        if section_marker not in existing:
+            if not existing.endswith('\n'):
+                existing += '\n'
+            with open(dst, 'w', encoding='utf-8') as f:
+                f.write(existing + '\n' + template)
+            return
+
+        # 如果有 section 标记
+        if not allow_replace:
+            # agent.md / CLAUDE.md: 已有 LRA section，不更新
+            return
+
+        # lra.md: 替换 section 部分
+        self._replace_section(existing, template, section_marker, dst)
+
+    def _replace_section(self, existing: str, template: str, section_marker: str, dst: str):
+        """替换 section 标记内的内容"""
+        import re
+
+        # 从模板中提取新的 section 内容（包括标记）
+        pattern = rf'(<!-- {re.escape(section_marker)} -->\n).*?(<!-- END {re.escape(section_marker)} -->)'
+        match = re.search(pattern, template, re.DOTALL)
+        if not match:
+            return
+
+        new_section = template[match.start():match.end()]
+
+        # 替换目标文件中的 section
+        new_content = re.sub(pattern, new_section, existing, flags=re.DOTALL)
+
+        # 清理重复的 section
+        new_content = self._deduplicate_sections(new_content, section_marker)
+
+        with open(dst, 'w', encoding='utf-8') as f:
+            f.write(new_content)
 
     def cmd_constitution(self, action: str, json_mode: bool = False):
         """Constitution管理命令"""
@@ -510,6 +788,117 @@ class LRACLI:
                     else:
                         print(f"{' ' * 14}→ lra set {task_id} completed")
 
+    def cmd_ready(
+        self,
+        json_mode: bool = False,
+        limit: Optional[int] = None,
+        priority_filter: Optional[str] = None,
+        assignee_filter: Optional[str] = None,
+        unassigned_only: bool = False,
+        sort: str = "priority",
+        explain: bool = False,
+    ):
+        """Show tasks that are ready to work on."""
+        if not self._check_project():
+            output({"error": "not_initialized"}, json_mode)
+            return
+
+        # Get ready tasks
+        ready_tasks = self.task_manager.get_ready_tasks(
+            locks_manager=self.locks_manager,
+            sort=sort,
+            limit=limit,
+            priority_filter=priority_filter,
+            assignee_filter=assignee_filter,
+            unassigned_only=unassigned_only,
+        )
+
+        # Get blocked tasks for --explain
+        blocked_tasks = []
+        if explain:
+            blocked_tasks = self.task_manager.get_blocked_tasks()
+
+        if json_mode:
+            output(
+                {
+                    "tasks": ready_tasks,
+                    "count": len(ready_tasks),
+                    "blocked_count": len(blocked_tasks) if explain else None,
+                    "blocked_tasks": blocked_tasks if explain else None,
+                },
+                json_mode,
+            )
+            return
+
+        # Human-readable output
+        if not ready_tasks:
+            print("📋 Ready work: no tasks available")
+            if explain and blocked_tasks:
+                self._print_blocked_tasks(blocked_tasks)
+            print("\nRun 'lra create \"task description\"' to create a new task.")
+            return
+
+        print(f"📋 Ready work ({len(ready_tasks)} tasks):\n")
+
+        for i, task in enumerate(ready_tasks, 1):
+            task_id = task["id"]
+            priority = task["priority"]
+            title = task["title"][:50] if len(task["title"]) > 50 else task["title"]
+            status = task["status"]
+            parent_id = task.get("parent_id")
+            assignee = task.get("assignee")
+
+            # Format assignee
+            assignee_str = ""
+            if assignee:
+                assignee_str = f" @{assignee}"
+            elif unassigned_only or assignee_filter is None:
+                assignee_str = " (unassigned)"
+
+            print(f"{i}. [{priority}] {task_id}: {title}{assignee_str}")
+
+            # Show parent info
+            if parent_id:
+                parent_task = self.task_manager.get(parent_id)
+                if parent_task:
+                    parent_status = parent_task.get("status", "unknown")
+                    print(f"   └─ Parent: {parent_id} ({parent_status})")
+
+            # Show blocked by info if any
+            blocked_by = task.get("blocked_by")
+            if blocked_by:
+                print(f"   └─ Blocked by: {', '.join(b['id'] for b in blocked_by)}")
+
+            print()
+
+        # Print blocked tasks for --explain
+        if explain and blocked_tasks:
+            self._print_blocked_tasks(blocked_tasks)
+
+        print("Run 'lra show <id>' for details.")
+
+    def _print_blocked_tasks(self, blocked_tasks: List[Dict[str, Any]]):
+        """Print blocked tasks with reasons."""
+        if not blocked_tasks:
+            return
+
+        print(f"\n🚫 Blocked tasks ({len(blocked_tasks)} tasks):\n")
+
+        for task in blocked_tasks:
+            task_id = task["id"]
+            priority = task["priority"]
+            desc = (
+                task["description"][:50] if len(task["description"]) > 50 else task["description"]
+            )
+            blocked_by = task.get("blocked_by", [])
+
+            print(f"• [{priority}] {task_id}: {desc}")
+            for block in blocked_by:
+                block_id = block["id"]
+                reason = block.get("reason") or block.get("status", "unknown")
+                print(f"    └─ {block_id}: {reason}")
+            print()
+
     def cmd_create(
         self,
         description: str,
@@ -630,7 +1019,13 @@ class LRACLI:
             else:
                 output(result, json_mode)
 
-    def cmd_new(self, description: str, auto_split: bool = False, variables: Optional[Dict[str, Any]] = None, json_mode: bool = False):
+    def cmd_new(
+        self,
+        description: str,
+        auto_split: bool = False,
+        variables: Optional[Dict[str, Any]] = None,
+        json_mode: bool = False,
+    ):
         """快速创建并认领任务"""
         if not self._check_project():
             output({"error": "not_initialized"}, json_mode)
@@ -2445,6 +2840,154 @@ class LRACLI:
             print("\n💡 提示：使用 'lra set <task_id> <status>' 更新状态")
             print("   系统会自动提示可用的状态流转选项")
 
+    def cmd_doctor(
+        self,
+        json_mode: bool = False,
+        fix: bool = False,
+        dry_run: bool = False,
+        verbose: bool = False,
+        check_name: Optional[str] = None,
+    ):
+        """LRA health diagnostics"""
+        from lra.doctor import (
+            run_diagnostics,
+            fix_orphaned_locks,
+            check_orphaned_locks,
+            check_installation,
+            check_task_list_valid,
+            check_locks_valid,
+            check_constitution_valid,
+            check_task_files,
+            check_orphaned_tasks,
+            check_circular_deps,
+            check_orphaned_locks,
+            check_stale_locks,
+            check_lock_file_valid,
+            check_config_valid,
+            check_version_tracking,
+            check_git_repo,
+        )
+        from lra.config import CURRENT_VERSION
+
+        path = "."
+
+        if json_mode:
+            result = run_diagnostics(path)
+            output(
+                {
+                    "overall_ok": result.overall_ok,
+                    "cli_version": result.cli_version,
+                    "timestamp": result.timestamp,
+                    "checks": [
+                        {
+                            "name": c.name,
+                            "status": c.status,
+                            "message": c.message,
+                            "detail": c.detail,
+                            "fix": c.fix,
+                            "category": c.category,
+                        }
+                        for c in result.checks
+                    ],
+                },
+                json_mode,
+            )
+            return
+
+        # Header
+        print(f"\n🔍 LRA Doctor v{CURRENT_VERSION}\n")
+
+        # If running a specific check
+        if check_name:
+            check_map = {
+                "installation": check_installation,
+                "task_list": check_task_list_valid,
+                "locks": check_locks_valid,
+                "constitution": check_constitution_valid,
+                "task_files": check_task_files,
+                "orphaned_tasks": check_orphaned_tasks,
+                "circular_deps": check_circular_deps,
+                "orphaned_locks": check_orphaned_locks,
+                "stale_locks": check_stale_locks,
+                "lock_structure": check_lock_file_valid,
+                "config": check_config_valid,
+                "version_tracking": check_version_tracking,
+                "git_repo": check_git_repo,
+            }
+            check_func = check_map.get(check_name)
+            if not check_func:
+                print(f"Unknown check: {check_name}")
+                print(f"Available checks: {', '.join(check_map.keys())}")
+                return
+            result = check_func(path)
+            status_icon = (
+                "✅" if result.status == "ok" else "⚠️" if result.status == "warning" else "❌"
+            )
+            print(f"  {status_icon} {result.name}: {result.message}")
+            if result.detail:
+                print(f"     └─ {result.detail}")
+            if result.fix and not fix:
+                print(f"     └─ Run 'lra doctor --fix' to fix")
+            return
+
+        # Run all diagnostics
+        result = run_diagnostics(path)
+
+        # Group checks by category
+        errors = 0
+        warnings = 0
+
+        for category in ["core", "locks", "tasks"]:
+            cat_checks = [c for c in result.checks if c.category == category]
+            if not cat_checks:
+                continue
+
+            if category == "core":
+                print(f"  Core:")
+            elif category == "locks":
+                print(f"\n  Locks:")
+            elif category == "tasks":
+                print(f"\n  Tasks:")
+
+            for check in cat_checks:
+                if check.status == "ok":
+                    if verbose:
+                        print(f"    ✅ {check.name}: {check.message}")
+                elif check.status == "warning":
+                    warnings += 1
+                    print(f"    ⚠️  {check.name}: {check.message}")
+                    if check.detail:
+                        print(f"       └─ {check.detail}")
+                    if check.fix:
+                        print(f"       └─ {check.fix}")
+                elif check.status == "error":
+                    errors += 1
+                    print(f"    ❌ {check.name}: {check.message}")
+                    if check.detail:
+                        print(f"       └─ {check.detail}")
+                    if check.fix:
+                        print(f"       └─ {check.fix}")
+
+        # Summary
+        print(f"\n  {errors} errors, {warnings} warnings")
+
+        if result.overall_ok:
+            print(f"\n✅ Overall: OK")
+        else:
+            print(f"\n❌ Overall: Issues found")
+
+        # Handle fix
+        if fix and warnings > 0:
+            print(f"\n--- Fix Mode ---")
+            orphaned = check_orphaned_locks(path)
+            if orphaned.status == "warning":
+                if dry_run:
+                    print(f"  [dry-run] Would clean orphaned locks")
+                else:
+                    print(f"  Cleaning orphaned locks...")
+                    fix_orphaned_locks(path)
+                    print(f"  ✅ Orphaned locks cleaned")
+
     def cmd_recover(self, json_mode: bool = False):
         """从 tasks/目录恢复任务列表"""
         import os
@@ -2701,11 +3244,37 @@ def main():
 
     # init
     init_p = subparsers.add_parser("init", help="Initialize project")
-    init_p.add_argument("--name", required=True, help="Project name")
+    init_p.add_argument("--name", "-n", help="Project name (default: directory name)")
     init_p.add_argument(
         "--template",
         default="task",
         help="Default template (default: task)",
+    )
+    init_p.add_argument(
+        "--force",
+        action="store_true",
+        help="Force re-initialization (WARNING: destroys existing data)",
+    )
+    init_p.add_argument(
+        "--destroy-token",
+        help="Token required for --force in non-interactive mode (format: DESTROY-<name>)",
+    )
+    init_p.add_argument(
+        "--quiet",
+        "-q",
+        action="store_true",
+        help="Minimal output",
+    )
+    init_p.add_argument(
+        "--skip-agents",
+        action="store_true",
+        help="Skip copying AGENTS.md to project root",
+    )
+    init_p.add_argument(
+        "--profile",
+        choices=["minimal", "full"],
+        default="full",
+        help="Agent profile template to use (default: full)",
     )
 
     # constitution
@@ -2733,6 +3302,24 @@ def main():
     list_p.add_argument("--status")
     list_p.add_argument("--template")
     list_p.add_argument("--compact", action="store_true", help="Compact output")
+
+    # ready
+    ready_p = subparsers.add_parser("ready", help="Show tasks ready to work on")
+    ready_p.add_argument("--json", action="store_true", help="JSON output")
+    ready_p.add_argument("-n", "--limit", type=int, default=None, help="Max tasks to show")
+    ready_p.add_argument(
+        "-p", "--priority", dest="priority_filter", default=None, help="Filter by priority (P0-P3)"
+    )
+    ready_p.add_argument("-a", "--assignee", default=None, help="Filter by assignee")
+    ready_p.add_argument("-u", "--unassigned", action="store_true", help="Only unassigned tasks")
+    ready_p.add_argument(
+        "-s",
+        "--sort",
+        default="priority",
+        choices=["priority", "oldest"],
+        help="Sort order (default: priority)",
+    )
+    ready_p.add_argument("--explain", action="store_true", help="Show why tasks are blocked")
 
     # create
     create_p = subparsers.add_parser(
@@ -3041,7 +3628,9 @@ Recommended workflow:
 
     # analyze project
     analyze_proj_p = analyze_sub.add_parser("project", help="Analyze entire project structure")
-    analyze_proj_p.add_argument("--output-dir", default="docs", help="Documentation output directory")
+    analyze_proj_p.add_argument(
+        "--output-dir", default="docs", help="Documentation output directory"
+    )
     analyze_proj_p.add_argument(
         "--create-tasks",
         action="store_true",
@@ -3064,7 +3653,9 @@ Recommended workflow:
     # analyze <module_name>
     analyze_mod_p = analyze_sub.add_parser("module", help="Analyze specific module")
     analyze_mod_p.add_argument("module_name", help="Module name to analyze")
-    analyze_mod_p.add_argument("--output-doc", action="store_true", help="Generate module documentation")
+    analyze_mod_p.add_argument(
+        "--output-doc", action="store_true", help="Generate module documentation"
+    )
 
     # where (merged with index)
     where_p = subparsers.add_parser("where", help="Show key file locations")
@@ -3075,6 +3666,16 @@ Recommended workflow:
 
     # v3.4.1: recover - 恢复任务列表
     subparsers.add_parser("recover", help="Recover task list from tasks/ directory")
+
+    # doctor - LRA health diagnostics
+    doctor_p = subparsers.add_parser("doctor", help="LRA health diagnostics")
+    doctor_p.add_argument("--json", action="store_true", help="JSON output")
+    doctor_p.add_argument("--fix", action="store_true", help="Fix issues automatically")
+    doctor_p.add_argument(
+        "--dry-run", action="store_true", dest="dry_run", help="Preview fixes without applying"
+    )
+    doctor_p.add_argument("--verbose", action="store_true", help="Show all checks including passed")
+    doctor_p.add_argument("--check", dest="check_name", help="Run specific check only")
 
     # ==================== v5.0 新增命令 ====================
 
@@ -3136,7 +3737,7 @@ Examples:
         "--variables",
         type=str,
         default=None,
-        help="Task variables as JSON (e.g., '{\"deliverables\":[\"src/x.py\"]}')",
+        help='Task variables as JSON (e.g., \'{"deliverables":["src/x.py"]}\')',
     )
 
     args = parser.parse_args()
@@ -3144,13 +3745,32 @@ Examples:
     cli = LRACLI()
 
     if args.command == "init":
-        cli.cmd_init(args.name, args.template, json_mode)
+        cli.cmd_init(
+            args.name,
+            args.template,
+            args.skip_agents,
+            getattr(args, "profile", "full"),
+            getattr(args, "force", False),
+            getattr(args, "destroy_token", None),
+            getattr(args, "quiet", False),
+            json_mode,
+        )
     elif args.command == "constitution":
         cli.cmd_constitution(args.action, json_mode)
     elif args.command == "context":
         cli.cmd_context(args.output_limit, json_mode, getattr(args, "full", False))
     elif args.command == "list":
         cli.cmd_list(args.status, args.template, args.compact, json_mode)
+    elif args.command == "ready":
+        cli.cmd_ready(
+            json_mode=args.json,
+            limit=args.limit,
+            priority_filter=args.priority_filter,
+            assignee_filter=args.assignee,
+            unassigned_only=args.unassigned,
+            sort=args.sort,
+            explain=args.explain,
+        )
     elif args.command == "create":
         cli.cmd_create(
             args.description,
@@ -3261,6 +3881,14 @@ Examples:
         cli.cmd_status_guide(json_mode)
     elif args.command == "recover":
         cli.cmd_recover(json_mode)
+    elif args.command == "doctor":
+        cli.cmd_doctor(
+            json_mode=getattr(args, "json", False),
+            fix=getattr(args, "fix", False),
+            dry_run=getattr(args, "dry_run", False),
+            verbose=getattr(args, "verbose", False),
+            check_name=getattr(args, "check_name", None),
+        )
 
     # ==================== v5.0 新增命令分发 ====================
 
@@ -3275,7 +3903,10 @@ Examples:
             cli.cmd_quality_check(getattr(args, "task_id", None), args.report, json_mode)
         elif args.test_cmd == "regression":
             cli.cmd_regression_test(
-                getattr(args, "task_id", None), getattr(args, "template", None), args.report, json_mode
+                getattr(args, "task_id", None),
+                getattr(args, "template", None),
+                args.report,
+                json_mode,
             )
         elif args.test_cmd == "browser":
             cli.cmd_browser_test(
