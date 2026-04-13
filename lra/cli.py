@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-LRA CLI v5.0
+LRA CLI v5.1.0
 AI Agent 任务管理 + 质量保障
 """
 
@@ -33,7 +33,7 @@ except:
 
 
 AGENT_GUIDE = """
-LRA v5.0 | AI Agent 任务管理 + 质量保障 + Constitution
+LRA v5.1.0 | AI Agent 任务管理 + 质量保障 + Constitution
 
 🚀 快速开始
    lra start                           # 智能启动（推荐）
@@ -3234,7 +3234,7 @@ class LRACLI:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="LRA v5.0 - AI Agent Task Manager with Quality Assurance",
+        description="LRA v5.1.0 - AI Agent Task Manager with Quality Assurance",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=AGENT_GUIDE,
     )
