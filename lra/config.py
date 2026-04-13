@@ -12,8 +12,8 @@ from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime
 from filelock import FileLock as _FileLock
 
-CURRENT_VERSION = "5.0.0"
-LRA_VERSION = "5.0.0"
+CURRENT_VERSION = "5.1.0"
+LRA_VERSION = "5.1.0"
 SCHEMA_VERSION = "2026-02-25"
 
 
