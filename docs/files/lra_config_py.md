@@ -1,6 +1,6 @@
 # lra/config.py
 
-> 语言：python | 代码行数：266
+> 语言：python | 代码行数：312
 
 ## 概述
 
@@ -11,10 +11,10 @@ LRA v5.0 配置模块
 
 | 类名 | 方法数 | 说明 |
 |------|--------|------|
-| `Config` | 14 | - |
+| `Config` | 15 | - |
 | `FileLock` | 3 | - |
 | `SafeJson` | 2 | - |
-| `GitHelper` | 3 | - |
+| `GitHelper` | 4 | - |
 
 ## 函数
 
@@ -30,6 +30,8 @@ LRA v5.0 配置模块
 2. 进程全局缓存
 3 |
 | `validate_project_initialized` | `` | - |
+| `is_initialized` | `` | Check if project is initialized (simpler version o |
+| `check_existing_data` | `path` | Returns task count if initialized, 0 otherwise. |
 
 ## 依赖
 

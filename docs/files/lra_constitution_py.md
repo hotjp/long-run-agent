@@ -1,6 +1,6 @@
 # lra/constitution.py
 
-> 语言：python | 代码行数：587
+> 语言：python | 代码行数：822
 
 ## 概述
 
@@ -19,8 +19,8 @@ v1.0 - 初始实现
 | `Principle` | 0 | 原则定义 |
 | `ValidationResult` | 0 | 验证结果 |
 | `GateResult` | 0 | 门禁检查结果 |
-| `ConstitutionManager` | 12 | Constitution管理器 |
-| `GateEvaluator` | 6 | 门禁评估器 |
+| `ConstitutionManager` | 14 | Constitution管理器 |
+| `GateEvaluator` | 9 | 门禁评估器 |
 | `PrincipleValidator` | 3 | 原则验证器 |
 
 ## 函数
@@ -36,6 +36,7 @@ v1.0 - 初始实现
 - typing
 - enum
 - pathlib
+- re
 - yaml
 - subprocess
 - hashlib
