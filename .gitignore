@@ -51,23 +51,8 @@ dist/
 *.whl
 *.tar.gz
 
-# Root level files (duplicates of package)
-/lra
-/config.py
-/feature_manager.py
-/status_manager.py
-/spec_manager.py
-/records_manager.py
-/operation_logger.py
-/upgrade_manager.py
-/code_checker.py
-/progress_tracker.py
-/session_manager.py
-/session_orchestrator.py
-/registry.py
-/resource_coordinator.py
-/init.sh.template
-/.long-run-agent/
+# Project dirs
+.long-run-agent/
 .opencode/
 
 # Temp files
