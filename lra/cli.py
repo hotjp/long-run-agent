@@ -304,7 +304,7 @@ class LRACLI:
             if existing_profile == "full" and profile == "minimal":
                 print(f"\n⚠️  已存在 full profile 的 lra.md，不会降级为 minimal")
                 # 仍然创建 agent.md 和 CLAUDE.md
-                self._copy_agent_and_claude(agent_dst, claude_dst, templates_dir, dst_dir)
+                self._copy_agent_and_claude(None, None, templates_dir, dst_dir)
                 return
 
         lra_src = os.path.join(templates_dir, f"lra-{profile}.md")
@@ -313,7 +313,7 @@ class LRACLI:
         self._update_or_create(lra_dst, lra_src, "BEGIN LRA INTEGRATION", allow_replace=True)
 
         # 2. agent.md 和 CLAUDE.md
-        self._copy_agent_and_claude(agent_dst, claude_dst, templates_dir, dst_dir)
+        self._copy_agent_and_claude(None, None, templates_dir, dst_dir)
 
         print(f"\n📄 Agent 指南已创建: lra.md, agent.md, CLAUDE.md")
 
