@@ -10,7 +10,7 @@
 
 **项目路径**: `/Users/kingj/.openclaw/workspace/long-run-agent`
 
-**当前版本**: v5.1.0 (🆕 Constitution功能已集成)
+**当前版本**: v5.1.1 (🆕 Constitution功能已集成)
 
 ## 🆕 新功能：Constitution (v5.0)
 
