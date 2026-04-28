@@ -2,6 +2,8 @@
 
 import asyncio
 import atexit
+import fcntl
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -18,18 +20,20 @@ from lra.relay.task_queue import TaskQueue
 class RelayOrchestrator:
     """Main relay orchestrator that runs the automated task loop.
 
-    Each "step" = one task going through all 7 Ralph Loop stages.
-    The AgentRunner handles stage iteration internally.
+    Design principles:
+    - No relay branch — all commits go directly to the current branch
+    - Per-stage commits for crash recovery (each stage = one git commit)
+    - Single-instance enforcement via file lock (one relay per repo at a time)
+    - Crash recovery: read ralph.iteration, resume from next stage
 
     Loop:
     1. Verify preconditions (git clean, project initialized)
-    2. Create isolated relay/{timestamp} branch
+    2. Acquire file lock (single-instance per repo)
     3. Get next task from queue
-    4. AgentRunner.run_task() — runs all 7 stages internally
-    5. On success: git commit + release lock
-    6. On Constitution failure: reset_hard + retry
-    7. On 3 consecutive failures: abort
-    8. On exit: cleanup locks, close agent进程
+    4. AgentRunner.run_task() — runs all 7 stages, each stage committed immediately
+    5. On success: release lock
+    6. On Constitution failure: release lock, next relay run resumes from current iteration
+    7. On exit: cleanup locks, close agent进程
     """
 
     def __init__(
@@ -39,14 +43,12 @@ class RelayOrchestrator:
         constitution_manager,  # ConstitutionManager
         run_dir: Path,
         max_steps: int = 50,
-        branch_name: Optional[str] = None,
     ):
         self.queue = task_queue
         self.adapter = adapter
         self.constitution = constitution_manager
         self.run_dir = run_dir
         self.max_steps = max_steps
-        self.branch_name = branch_name or f"relay/{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
         self.notes = NotesStore(run_dir / "notes.md")
         self.backoff = ExponentialBackoff()
@@ -54,10 +56,32 @@ class RelayOrchestrator:
 
         self._global_step = 0
         self._current_task_id: Optional[str] = None
-        self._original_branch: Optional[str] = None
         self._should_stop_flag = False
+        self._lock_fd: Optional[int] = None
 
         atexit.register(self._emergency_cleanup)
+
+    def _acquire_file_lock(self, cwd: Path) -> bool:
+        """Acquire exclusive file lock to prevent concurrent relay instances."""
+        lock_path = Path(Config.get_metadata_dir()) / ".relay.lock"
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        self._lock_fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR)
+        try:
+            fcntl.flock(self._lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return True
+        except (IOError, OSError):
+            os.close(self._lock_fd)
+            self._lock_fd = None
+            return False
+
+    def _release_file_lock(self) -> None:
+        if self._lock_fd is not None:
+            try:
+                fcntl.flock(self._lock_fd, fcntl.LOCK_UN)
+                os.close(self._lock_fd)
+            except (IOError, OSError):
+                pass
+            self._lock_fd = None
 
     async def run(self) -> dict:
         """Run the relay orchestrator. Returns summary dict."""
@@ -69,7 +93,6 @@ class RelayOrchestrator:
             "tasks_succeeded": 0,
             "tasks_failed": 0,
             "errors": [],
-            "relay_branch": self.branch_name,
         }
 
         # 1. Precondition checks
@@ -84,13 +107,10 @@ class RelayOrchestrator:
             summary["errors"].append("Project not initialized (run lra init)")
             return summary
 
-        # 2. Create relay branch
-        self._original_branch = self.git.get_current_branch(cwd)
-        try:
-            self.git.create_branch(self.branch_name, cwd)
-        except GitError:
-            # Branch exists, switch to it
-            self.git._git(["checkout", self.branch_name], cwd)
+        # 2. Single-instance lock
+        if not self._acquire_file_lock(cwd):
+            summary["errors"].append("Another relay instance is already running in this repo")
+            return summary
 
         # Write output schema for Claude CLI
         schema_path = self.run_dir / "output-schema.json"
@@ -98,7 +118,7 @@ class RelayOrchestrator:
 
         try:
             while not self._should_stop():
-                # Check abort condition (3 consecutive failures)
+                # Check abort condition (per-task backoff)
                 if self.backoff.should_abort:
                     summary["errors"].append(
                         f"Abort after {self.backoff.consecutive_failures} consecutive failures"
@@ -117,13 +137,18 @@ class RelayOrchestrator:
 
                 self._current_task_id = task["id"]
 
-                # Build agent runner WITH TaskManager
+                # Fresh backoff per task (per-task, not global across all tasks)
+                self.backoff = ExponentialBackoff()
+
+                # Build agent runner
                 runner = AgentRunner(
                     adapter=self.adapter,
                     notes_store=self.notes,
                     backoff=self.backoff,
                     locks_manager=self.queue.lm,
                     task_manager=self.queue.tm,
+                    git_utils=self.git,
+                    repo_root=cwd,
                 )
 
                 # Run task through all Ralph Loop stages
@@ -134,9 +159,9 @@ class RelayOrchestrator:
 
                 # Handle result
                 if result.success:
-                    self._commit_and_advance(task, result, summary)
+                    self._on_task_success(task, result, summary)
                 else:
-                    self._rollback_and_retry(task, result, summary)
+                    self._on_task_failure(task, result, summary)
 
                 # Invalidate cache
                 self.queue.invalidate_cache()
@@ -147,16 +172,9 @@ class RelayOrchestrator:
         summary["completed_at"] = datetime.now().isoformat()
         return summary
 
-    def _commit_and_advance(self, task: dict, result: TaskRunResult, summary: dict) -> None:
-        """Commit changes after successful task completion."""
+    def _on_task_success(self, task: dict, result: TaskRunResult, summary: dict) -> None:
+        """Handle successful task completion."""
         task_id = task["id"]
-        cwd = Path.cwd()
-
-        # Git commit
-        stg = f"{result.iterations_completed}/7 stages"
-        commit_msg = f"relay {task_id}: {result.summary[:50]} ({stg})"
-        self.git.add_all(cwd)
-        self.git.commit(commit_msg, cwd)
 
         # Write notes
         attempt = self.notes.get_task_attempts(task_id) + 1
@@ -175,23 +193,27 @@ class RelayOrchestrator:
         summary["tasks_succeeded"] += 1
         self._current_task_id = None
 
-    def _rollback_and_retry(self, task: dict, result: TaskRunResult, summary: dict) -> None:
-        """Rollback and retry task after Constitution failure."""
-        task_id = task["id"]
-        cwd = Path.cwd()
+    def _on_task_failure(self, task: dict, result: TaskRunResult, summary: dict) -> None:
+        """Handle Constitution failure — do NOT reset_hard (stages already committed).
 
-        # Reset + clean to rollback changes
-        self.git.reset_hard(cwd)
+        The task's ralph.iteration is at the last passed stage. Next relay run
+        will resume from the next stage. Duplicate work on retry is acceptable
+        since stages are idempotent.
+        """
+        task_id = task["id"]
 
         # Write notes
         attempt = self.notes.get_task_attempts(task_id) + 1
         self.notes.append(
             task_id=task_id,
             attempt=attempt,
-            summary=f"[ROLLED BACK] {result.summary}",
+            summary=f"[FAILED] {result.summary}",
             changes=[],
             learnings=result.key_learnings + result.errors,
         )
+
+        # Release lock so task can be retried
+        self.queue.lm.release(task_id)
 
         summary["tasks_failed"] += 1
         summary["errors"].extend([f"{task_id}: {e}" for e in result.errors])
@@ -206,6 +228,7 @@ class RelayOrchestrator:
 
     def _emergency_cleanup(self) -> None:
         """Ensure: release locks, close agent进程, flush logs."""
+        self._release_file_lock()
         if self._current_task_id:
             try:
                 self.queue.lm.release(self._current_task_id)

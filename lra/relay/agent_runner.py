@@ -11,6 +11,7 @@ from lra.config import Config, FileLock
 from lra.locks_manager import LocksManager
 from lra.relay.backoff import ExponentialBackoff
 from lra.relay.claude_adapter import ClaudeAdapter
+from lra.relay.git_utils import GitError
 from lra.relay.notes_store import NotesStore
 from lra.relay.structured_output import AgentOutput, validate_output
 
@@ -59,12 +60,16 @@ class AgentRunner:
         backoff: ExponentialBackoff,
         locks_manager: LocksManager,
         task_manager,  # TaskManager instance
+        git_utils=None,  # GitUtils instance for per-stage commits
+        repo_root=None,  # Git repository root (Path.cwd())
     ):
         self.adapter = adapter
         self.notes = notes_store
         self.backoff = backoff
         self.lm = locks_manager
         self.tm = task_manager
+        self.git = git_utils
+        self.repo_root = repo_root or Path.cwd()
         self._heartbeat_thread: Optional[threading.Thread] = None
         self._stop_heartbeat = threading.Event()
 
@@ -198,6 +203,10 @@ class AgentRunner:
 
             # Run Constitution gates for this stage (stage 1-7)
             gate_result = self._run_stage_gates(task_id, stage_num)
+
+            # Store gate results in task ralph state
+            self.tm.record_gate_results(task_id, stage_num, gate_result)
+
             if not gate_result["passed"]:
                 failed_gates = [g["name"] for g in gate_result["gates"] if not g["passed"]]
                 self.backoff.record_failure()
@@ -210,7 +219,26 @@ class AgentRunner:
                     errors=[f"Stage {stage_num}: Constitution gates failed: {failed_gates}"],
                 )
 
-            # Stage passed. If not last stage, advance to next.
+            # Stage passed. Commit work BEFORE incrementing iteration (critical for crash recovery).
+            # Only increment iteration AFTER commit succeeds — this ensures iteration always
+            # corresponds to a committed state. If crash between commit and increment,
+            # the new relay will re-run the same stage (safe duplicate).
+            if self.git:
+                stage_msg = f"relay {task_id}: stage {stage_num}/7 - {output.summary[:40]}"
+                try:
+                    self.git.add_all(self.repo_root)
+                    self.git.commit(stage_msg, self.repo_root)
+                except GitError as e:
+                    return TaskRunResult(
+                        success=False,
+                        summary=final_summary,
+                        key_changes=all_changes,
+                        key_learnings=all_learnings,
+                        iterations_completed=stage_idx,
+                        errors=[f"Stage {stage_num}: Git commit failed: {e}"],
+                    )
+
+            # Increment iteration AFTER commit (iteration = "stages completed and committed")
             if stage_num < max_iterations:
                 ok, new_iter = self._advance_stage(task_id, stage_num)
                 if not ok:
@@ -263,8 +291,15 @@ class AgentRunner:
 
     def _mark_completed(self, task_id: str) -> None:
         """Mark task as completed after all stages pass."""
+        from datetime import datetime
+
         with FileLock(Config.get_task_list_path()):
             self.tm.update_status(task_id, "completed")
+            # Reset iteration and mark completed in ralph state
+            self.tm.update_ralph_state(task_id, {
+                "iteration": 0,
+                "completed_at": datetime.now().isoformat(),
+            })
 
     def _start_heartbeat(self, task_id: str) -> None:
         """Start background thread that sends heartbeat every 4 minutes."""

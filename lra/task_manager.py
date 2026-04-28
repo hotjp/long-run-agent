@@ -1337,6 +1337,32 @@ class TaskManager:
 
         return False, "not_found"
 
+    def record_gate_results(self, task_id: str, stage: int, gate_result: Dict[str, Any]) -> Tuple[bool, str]:
+        """Record Constitution gate results for a stage."""
+        data = self._load()
+        if not data:
+            return False, "not_initialized"
+
+        for t in data.get("tasks", []):
+            if t.get("id") == task_id:
+                ralph = t.get("ralph", {})
+                gate_results = ralph.get("gate_results", [])
+                gate_results.append(
+                    {
+                        "stage": stage,
+                        "passed": gate_result.get("passed", False),
+                        "gates": gate_result.get("gates", []),
+                        "timestamp": datetime.now().isoformat(),
+                    }
+                )
+                ralph["gate_results"] = gate_results
+                t["ralph"] = ralph
+                t["updated_at"] = datetime.now().isoformat()
+                self._save(data)
+                return True, "recorded"
+
+        return False, "not_found"
+
     def add_ralph_issue(
         self, task_id: str, issue_type: str, message: str, round_num: int = None
     ) -> Tuple[bool, str]:

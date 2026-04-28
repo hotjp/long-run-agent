@@ -3242,16 +3242,9 @@ class LRACLI:
 
         # Prepare run directory
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        branch_name = f"relay/{timestamp}"
         run_dir = Path(Config.get_metadata_dir()) / "runs" / timestamp
-        run_dir.mkdir(parents=True, exist_ok=True)
 
-        # Write output schema
-        from lra.relay.structured_output import write_schema_file
-        schema_path = run_dir / "output-schema.json"
-        write_schema_file(schema_path)
-
-        # Dry run: just show what would run
+        # Dry run: just show what would run (no side effects)
         if dry_run:
             queue = TaskQueue(self.task_manager, self.locks_manager)
             ready = self.task_manager.get_ready_tasks(self.locks_manager, sort="priority")
@@ -3263,6 +3256,12 @@ class LRACLI:
                 print(f"  {task['id']}: {task.get('description', '')[:60]} ... ({task.get('priority', 'P3')})")
             return
 
+        # Actually run — create directories and schema
+        run_dir.mkdir(parents=True, exist_ok=True)
+        from lra.relay.structured_output import write_schema_file
+        schema_path = run_dir / "output-schema.json"
+        write_schema_file(schema_path)
+
         # Create adapter
         adapter = ClaudeAdapter(schema_path=schema_path)
 
@@ -3273,7 +3272,6 @@ class LRACLI:
             constitution_manager=self.constitution,
             run_dir=run_dir,
             max_steps=max_steps,
-            branch_name=branch_name,
         )
 
         summary = asyncio.run(orchestrator.run())
@@ -3286,8 +3284,6 @@ class LRACLI:
         print(f"Tasks processed: {summary['tasks_processed']}")
         print(f"Tasks succeeded: {summary['tasks_succeeded']}")
         print(f"Tasks failed: {summary['tasks_failed']}")
-        if summary.get("relay_branch"):
-            print(f"Relay branch: {summary['relay_branch']}")
         if summary["errors"]:
             print(f"\nErrors:")
             for err in summary["errors"]:
