@@ -205,14 +205,32 @@ class SafeJson:
 
     @staticmethod
     def write(path: str, data: Dict[str, Any]) -> bool:
+        """
+        Atomic write: write to temp file, fsync, then rename.
+        Prevents file corruption on crash/power loss.
+        """
+        import tempfile
+        import shutil
+
         dir_path = os.path.dirname(path)
         if dir_path:
             os.makedirs(dir_path, exist_ok=True)
+
+        # Write to temp file in same directory (required for atomic rename)
+        fd, tmp_path = tempfile.mkstemp(dir=dir_path, suffix=".tmp")
         try:
-            with open(path, "w", encoding="utf-8") as f:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
+                f.flush()
+                os.fsync(f.fileno())  # Ensure data is on disk
+            shutil.move(tmp_path, path)  # Atomic rename
             return True
         except:
+            # Clean up temp file on failure
+            try:
+                os.unlink(tmp_path)
+            except:
+                pass
             return False
 
 
