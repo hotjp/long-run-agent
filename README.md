@@ -1,4 +1,4 @@
-# LRA - AI Agent Task Manager v5.1.3
+# LRA - AI Agent Task Manager v5.2.0
 
 **规范驱动 + 任务管理 + 质量保障系统 + 迭代阶段引导**
 
