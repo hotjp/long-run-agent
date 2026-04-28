@@ -3231,6 +3231,68 @@ class LRACLI:
             print("   lra context                # 查看上下文")
             print()
 
+    def cmd_relay(self, max_steps: int = 50, dry_run: bool = False, json_mode: bool = False):
+        """Run automated relay — task execution loop."""
+        import asyncio
+        from pathlib import Path
+        from datetime import datetime
+
+        from lra.relay import RelayOrchestrator, TaskQueue, ClaudeAdapter
+        from lra.config import Config
+
+        # Prepare run directory
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        branch_name = f"relay/{timestamp}"
+        run_dir = Path(Config.get_metadata_dir()) / "runs" / timestamp
+        run_dir.mkdir(parents=True, exist_ok=True)
+
+        # Write output schema
+        from lra.relay.structured_output import write_schema_file
+        schema_path = run_dir / "output-schema.json"
+        write_schema_file(schema_path)
+
+        # Dry run: just show what would run
+        if dry_run:
+            queue = TaskQueue(self.task_manager, self.locks_manager)
+            ready = self.task_manager.get_ready_tasks(self.locks_manager, sort="priority")
+            if not ready:
+                print("No ready tasks to run.")
+                return
+            print("Would run:")
+            for task in ready[:max_steps]:
+                print(f"  {task['id']}: {task.get('description', '')[:60]} ... ({task.get('priority', 'P3')})")
+            return
+
+        # Create adapter
+        adapter = ClaudeAdapter(schema_path=schema_path)
+
+        # Run orchestrator
+        orchestrator = RelayOrchestrator(
+            task_queue=TaskQueue(self.task_manager, self.locks_manager),
+            adapter=adapter,
+            constitution_manager=self.constitution,
+            run_dir=run_dir,
+            max_steps=max_steps,
+            branch_name=branch_name,
+        )
+
+        summary = asyncio.run(orchestrator.run())
+
+        if json_mode:
+            output(summary, json_mode)
+            return
+
+        print(f"\n=== Relay Summary ===")
+        print(f"Tasks processed: {summary['tasks_processed']}")
+        print(f"Tasks succeeded: {summary['tasks_succeeded']}")
+        print(f"Tasks failed: {summary['tasks_failed']}")
+        if summary.get("relay_branch"):
+            print(f"Relay branch: {summary['relay_branch']}")
+        if summary["errors"]:
+            print(f"\nErrors:")
+            for err in summary["errors"]:
+                print(f"  - {err}")
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -3657,6 +3719,29 @@ Recommended workflow:
         "--output-doc", action="store_true", help="Generate module documentation"
     )
 
+    # relay - Automated task execution loop
+    relay_p = subparsers.add_parser(
+        "relay",
+        help="Run automated task execution loop",
+        description="""Run the relay orchestrator to automatically:
+1. Verify working tree is clean
+2. Create isolated relay/{timestamp} branch
+3. Get ready tasks and execute them with Claude agent
+4. Commit changes and merge back to original branch
+""",
+    )
+    relay_p.add_argument(
+        "--max-steps",
+        type=int,
+        default=50,
+        help="Maximum number of tasks to process (default: 50)",
+    )
+    relay_p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be done without executing",
+    )
+
     # where (merged with index)
     where_p = subparsers.add_parser("where", help="Show key file locations")
     where_p.add_argument("--index", action="store_true", help="Output agent index content")
@@ -3920,6 +4005,8 @@ Examples:
         cli.cmd_new(args.description, args.auto_split, vars, json_mode)
     elif args.command == "start":
         cli.cmd_start(args.task_desc, args.name, args.auto, json_mode)
+    elif args.command == "relay":
+        cli.cmd_relay(args.max_steps, args.dry_run, json_mode)
     else:
         parser.print_help()
 

@@ -5,14 +5,14 @@ Constitution - 项目宪法管理器
 v1.0 - 初始实现
 """
 
+import re
+import subprocess
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional, Tuple
 from enum import Enum
 from pathlib import Path
-import re
+from typing import Any, Dict, List, Optional, Tuple
+
 import yaml
-import subprocess
-import hashlib
 
 
 class PrincipleType(Enum):
@@ -108,7 +108,8 @@ class ConstitutionManager:
                         "type": "custom",
                         "name": "deliverables_exist",
                         "check_func": "check_deliverables_exist",
-                        "check_level": "basic",  # v6.0: check file is not empty and has code patterns
+                        "check_level": "basic",
+                        # v6.0: check file is not empty and has code patterns
                         "required": True,
                         "description": "检查 deliverables 中的文件是否存在且包含代码",
                     }
@@ -137,7 +138,7 @@ class ConstitutionManager:
             return self.DEFAULT_CONSTITUTION.copy()
 
         try:
-            with open(self.constitution_path, "r", encoding="utf-8") as f:
+            with open(self.constitution_path, encoding="utf-8") as f:
                 constitution = yaml.safe_load(f)
                 return constitution if constitution else self.DEFAULT_CONSTITUTION.copy()
         except Exception as e:
@@ -148,8 +149,8 @@ class ConstitutionManager:
         """验证Constitution配置完整性"""
         required_fields = ["schema_version", "core_principles"]
 
-        for field in required_fields:
-            if field not in self.constitution:
+        for req_field in required_fields:
+            if req_field not in self.constitution:
                 raise ValueError(f"Constitution缺少必需字段: {field}")
 
         # 验证原则结构
@@ -202,36 +203,12 @@ class ConstitutionManager:
         return gates
 
     def get_default_iteration_gates(self) -> Dict[int, List[Dict[str, Any]]]:
-        """获取默认的迭代阶段门禁（如果配置中没有定义）"""
-        return {
-            1: [  # 基础实现阶段
-                {
-                    "name": "syntax_check",
-                    "type": "command",
-                    "command": "python -m py_compile .",
-                    "required": False,
-                    "description": "Python语法检查",
-                }
-            ],
-            2: [  # 功能完善阶段
-                {
-                    "name": "lint_check",
-                    "type": "command",
-                    "command": "ruff check .",
-                    "required": False,
-                    "description": "代码风格检查",
-                }
-            ],
-            3: [  # 代码优化阶段
-                {
-                    "name": "type_check",
-                    "type": "command",
-                    "command": "mypy . --ignore-missing-imports",
-                    "required": False,
-                    "description": "类型检查",
-                }
-            ],
-        }
+        """获取默认的迭代阶段门禁。
+
+        框架不硬编码语言相关的工具命令，由 Agent 自主根据项目类型选择工具。
+        如需配置，在 constitution.yaml 的 iteration_gates 中定义。
+        """
+        return {}
 
     def get_all_applicable_principles(self, template: Optional[str] = None) -> List[Dict[str, Any]]:
         """获取所有适用原则"""
@@ -445,7 +422,7 @@ class GateEvaluator:
             )
 
         try:
-            with open(constitution_path, "r", encoding="utf-8") as f:
+            with open(constitution_path, encoding="utf-8") as f:
                 yaml.safe_load(f)
 
             return GateResult(
@@ -500,7 +477,7 @@ class GateEvaluator:
                 - "basic": 非空 + 检查代码基本模式
         """
         import os
-        from pathlib import Path
+
         from lra.config import Config
 
         # 获取检查级别
@@ -516,7 +493,7 @@ class GateEvaluator:
             )
 
         try:
-            with open(task_path, "r", encoding="utf-8") as f:
+            with open(task_path, encoding="utf-8") as f:
                 content = f.read()
 
             # 提取 deliverables 部分
@@ -772,7 +749,8 @@ def create_default_constitution(project_name: str = "My Project") -> Dict[str, A
                         "type": "custom",
                         "name": "deliverables_exist",
                         "check_func": "check_deliverables_exist",
-                        "check_level": "basic",  # v6.0: check file is not empty and has code patterns
+                        "check_level": "basic",
+                        # v6.0: check file is not empty and has code patterns
                         "required": True,
                         "description": "检查 deliverables 中的文件是否存在且包含代码",
                     }
