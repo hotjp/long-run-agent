@@ -2,6 +2,48 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.2.0] - 2026-04-28
+
+### 🎉 重大功能：LRA Relay — 全自主 Agent 中继
+
+新增 `lra relay` 命令，实现完全自主的 Agent 任务执行循环：
+
+#### 核心组件 (`lra/relay/`)
+
+| 组件 | 功能 |
+|------|------|
+| `orchestrator.py` | 主循环，Git 分支隔离 + 失败回滚 |
+| `agent_runner.py` | Ralph Loop 7 阶段迭代执行器 |
+| `claude_adapter.py` | Claude CLI 子进程管理，JSONL 输出，15s 宽限期 |
+| `git_utils.py` | 安全 Git 操作（subprocess.run list 参数，无 shell） |
+| `task_queue.py` | mtime 缓存任务队列，基于 `TaskManager.get_ready_tasks()` |
+| `structured_output.py` | JSON Schema 生成 + Python 验证 |
+| `backoff.py` | 指数退避，硬错误/软错误分离 |
+| `notes_store.py` | 追加写 JSONL 内存存储 |
+
+#### CLI 接口
+
+```bash
+lra relay --dry-run      # 预览任务，不执行
+lra relay --max-steps N  # 最多执行 N 个任务
+lra relay                # 全自主执行
+```
+
+#### Constitution 变革
+
+- `get_default_iteration_gates()` 现在返回 `{}`（无硬编码语言工具）
+- Agent 完全自主 — 自动检测项目类型并选择工具
+- 框架仅在 Agent 报告后验证 Constitution gates
+
+### 🔄 重构
+
+- **Relay 简化**：移除 relay 分支，改为 per-stage commits + 文件锁
+- **Agent Prompt 重写**：改为 Ralph Loop 操作规程
+
+### 📚 文档更新
+
+- README 和 index.html 更新适配 Relay v5.1
+
 ## [5.0.1] - 2026-04-02
 
 ### 🔄 重构
