@@ -1,440 +1,166 @@
-# LRA Agent Prompt Template
+# LRA Agent — Ralph Loop 操作规程
 
-## YOUR ROLE - LRA Task Agent
+## ⚠️ 绝对规则
 
-You are working on a long-running autonomous development task managed by LRA (Long-Run-Agent).
-
-**Important**: This is a FRESH context window - you have no memory of previous sessions.
-You must rebuild context from task files, project structure, and progress records.
-
----
-
-## STEP 1: GET YOUR BEARINGS (MANDATORY)
-
-Start by orienting yourself with these commands:
-
-### Option A: Quick Overview (Recommended)
-```bash
-# 快速了解项目状态（推荐）
-lra orientation
-```
-
-### Option B: Detailed View
-```bash
-# 1. 确认工作目录
-pwd
-
-# 2. 查看项目结构
-lra where
-
-# 3. 查看项目状态（可视化进度）
-lra status
-
-# 4. 获取完整上下文（可领取任务 + 进度）
-lra context --full
-
-# 5. 查看Agent索引（快速定位代码）
-cat .long-run-agent/analysis/index.json
-
-# 6. 查看最近提交
-git log --oneline -10
-
-# 7. 查看进度笔记
-cat .long-run-agent/progress.txt 2>/dev/null || echo "No progress notes yet"
-```
-
-Understanding the project structure is critical - use these commands to orient yourself.
+1. **禁止跳过阶段** — 必须按顺序通过每个阶段，不能直接 set completed
+2. **禁止跳过证据** — 每阶段必须填充证据字段才能推进
+3. **禁止手动编辑 JSON** — 用 `lra set` 命令改状态
+4. **禁止提交未验证代码** — 测试必须跑过才能 commit
 
 ---
 
-## STEP 2: CHOOSE A TASK
+## Ralph Loop — 7 阶段迭代模型
 
-### Option A: Continue In-Progress Task
+每个任务必须逐阶段完成，不能跳阶段：
+
+```
+Stage 1: 理解规划 → Stage 2: 基础实现 → Stage 3: 功能完善 →
+Stage 4: 质量提升 → Stage 5: 优化改进 → Stage 6: 验证测试 →
+Stage 7: 交付准备 → [完成]
+```
+
+### 每阶段检查项
+
+| 阶段 | 门禁 | 命令 |
+|------|------|------|
+| 1 理解规划 | 理解需求，拆分任务 | — |
+| 2 基础实现 | 代码能跑，无语法错误 | `python -m py_compile .` |
+| 3 功能完善 | 功能完整，边界处理 | `ruff check .` |
+| 4 质量提升 | 类型检查通过 | `mypy . --ignore-missing-imports` |
+| 5 优化改进 | 性能/结构优化 | 代码 review |
+| 6 验证测试 | 测试通过 | `pytest tests/ -v` |
+| 7 交付准备 | 文档/变更记录 | `lra regression-test` |
+
+### 阶段推进命令
+
+每阶段完成后，推进到下一阶段：
 
 ```bash
-# 查看进行中的任务
-lra list --status in_progress
+lra set <task_id> force_next_stage
+```
 
-# 选择一个任务继续
+---
+
+## 完整工作流
+
+### 第一步：领取任务
+```bash
+lra claim <task_id>
 lra show <task_id>
 ```
 
-### Option B: Start New Task
+### 第二步：读懂任务
+- 需求是什么？
+- 验收标准是什么？
+- 属于哪个阶段？（看任务状态）
 
-```bash
-# 查看可领取任务
-lra context --output-limit 8k
+### 第三步：按阶段工作
 
-# 选择一个任务领取
-lra claim <task_id>
-```
+#### Stage 2 基础实现
+1. 写核心代码
+2. `python -m py_compile .` 验证语法
+3. 填证据到任务文件
+4. `lra set <task_id> force_next_stage`
 
-**Priority Rules**:
-- Fix broken tests before implementing new features
-- Complete in-progress tasks before starting new ones
-- Choose tasks matching your output limit (8k/16k/128k)
+#### Stage 3 功能完善
+1. 补全功能，处理边界
+2. `ruff check .` 验证风格
+3. 更新证据
+4. `lra set <task_id> force_next_stage`
 
----
+#### Stage 4 质量提升
+1. 类型注解、错误处理
+2. `mypy . --ignore-missing-imports`
+3. 更新证据
+4. `lra set <task_id> force_next_stage`
 
-## STEP 3: CLAIM THE TASK
+#### Stage 5 优化改进
+1. 重构/性能优化
+2. 更新证据
+3. `lra set <task_id> force_next_stage`
 
-```bash
-lra claim <task_id>
-```
+#### Stage 6 验证测试
+1. 运行完整测试
+2. `pytest tests/ -v`
+3. `lra regression-test`
+4. 更新证据
+5. `lra set <task_id> force_next_stage`
 
-This will:
-- Lock the task for you
-- Lock all subtasks (if any)
-- Record your agent ID
+#### Stage 7 交付准备
+1. 文档更新
+2. git commit
+3. `lra set <task_id> completed`
 
-**If task is already locked**:
-- Check lock status: `lra show <task_id>`
-- Wait for heartbeat timeout (10 minutes) or
-- Contact the task owner
+### 第四步：证据格式
 
----
+每阶段完成后，编辑 `.long-run-agent/tasks/<task_id>.md`：
 
-## STEP 4: READ TASK DETAILS
+```markdown
+### 阶段 N 证据（<阶段名>）
 
-```bash
-# 查看任务文件
-cat .long-run-agent/tasks/<task_id>.md
-
-# 查看任务依赖（如果有）
-lra deps <task_id>
-
-# 查看相关代码（使用索引）
-cat .long-run-agent/analysis/index.json | grep -i "keyword"
-```
-
-Understand:
-- Task description and requirements
-- Dependencies (must be completed first)
-- Template constraints (state transitions)
-- Verification requirements
-
----
-
-## STEP 5: IMPLEMENT THE TASK
-
-### For Code Tasks (code-module template):
-
-1. **Read existing code**
-   ```bash
-   # 使用索引快速定位
-   cat .long-run-agent/analysis/index.json
-   ```
-
-2. **Implement functionality**
-   - Follow project coding standards
-   - Write clean, maintainable code
-   - Add appropriate error handling
-   - Consider edge cases
-
-3. **Write tests**
-   - Unit tests for core logic
-   - Integration tests for APIs
-   - Update existing tests if needed
-
-4. **Test locally**
-   ```bash
-   pytest tests/ -v
-   # or
-   npm test
-   ```
-
-### For Documentation Tasks:
-
-1. **Locate relevant docs**
-   ```bash
-   find . -name "*.md" -type f | head -20
-   ```
-
-2. **Update documentation**
-   - Keep changes minimal and focused
-   - Update API docs if interfaces changed
-   - Add examples for new features
-
-3. **Verify links and formatting**
-   ```bash
-   # Check for broken links
-   grep -r "\[.*\](.*)" docs/
-   ```
-
-### For Data Tasks:
-
-1. **Understand data sources**
-2. **Implement processing logic**
-3. **Validate outputs**
-4. **Document transformations**
-
----
-
-## STEP 6: VERIFY YOUR WORK (MANDATORY)
-
-**⚠️ CRITICAL: Before marking task as completed, you MUST verify:**
-
-### Verification Checklist:
-
-- [ ] **Code compiles/runs** without errors
-- [ ] **Tests pass** (if applicable)
-- [ ] **Manual testing** performed
-- [ ] **No regression** in existing features
-- [ ] **Documentation updated** (if needed)
-- [ ] **Edge cases** handled
-
-### For UI Tasks:
-
-- [ ] **Screenshots captured**
-  ```bash
-  # Save screenshots to verification directory
-  mkdir -p .long-run-agent/screenshots
-  # Take screenshots at each key step
-  ```
-
-- [ ] **Visual verification** completed
-- [ ] **Browser console** checked for errors
-- [ ] **Mobile responsive** tested (if applicable)
-
-### For API Tasks:
-
-- [ ] **Request/response** validated
-- [ ] **Error cases** tested
-- [ ] **Performance** acceptable
-- [ ] **API documentation** updated
-
-### Regression Test (RECOMMENDED):
-
-```bash
-# Run regression tests to ensure nothing broke
-lra regression-test
-
-# Or run specific tests
-lra regression-test --template code-module
+- **通过检查**: [命令和结果]
+- **改动内容**: [具体修改了什么]
+- **影响范围**: [改了什么文件/功能]
 ```
 
 ---
 
-## STEP 7: PROVIDE EVIDENCE (MANDATORY)
+## 证据必须包含的内容
 
-**⚠️ Task completion requires verification evidence!**
-
-Edit the task file (`.long-run-agent/tasks/<task_id>.md`) and fill in:
-
-### 测试证据（完成前必填）
-
-- [x] **实现证明**: [Brief description of implementation]
-- [x] **测试验证**: [How you tested]
-- [x] **影响范围**: [What was affected]
-
-### 测试步骤
-1. [Step 1]
-2. [Step 2]
-3. [Step 3]
-
-### 验证结果
 ```
-[Paste test output, command results, or screenshot paths]
-```
+### 测试证据
+- [x] **实现证明**: [简要说明实现了什么]
+- [x] **测试验证**: [运行了什么测试，结果如何]
+- [x] **影响范围**: [改了哪些文件]
 
-**Without this evidence, task cannot be marked as completed!**
+### 验证步骤
+1. [执行命令]
+2. [实际输出]
+```
 
 ---
 
-## STEP 8: UPDATE TASK STATUS
-
-```bash
-# Update status
-lra set <task_id> completed
-```
-
-**The system will check**:
-- Verification evidence is present
-- Status transition is valid (per template)
-- Dependencies are satisfied
-
-**If validation fails**:
-- Add missing evidence
-- Fix any issues
-- Try again
-
----
-
-## STEP 9: COMMIT YOUR PROGRESS
-
-Make a descriptive git commit:
+## 提交格式
 
 ```bash
 git add .
-git commit -m "feat: <task description>
+git commit -m "feat(<stage>): <任务描述>
 
-- Implemented <specific changes>
-- Tested with <test method>
-- Task: <task_id>
+- Stage <N>: <阶段名>
+- 检查: <通过的检查命令>
+- 任务: <task_id>
 
-🤖 Generated with LRA
-
-Co-Authored-By: LRA Agent <agent@lra.dev>"
-```
-
-**Commit message guidelines**:
-- Use conventional commits (feat/fix/refactor/docs)
-- Include task ID for traceability
-- Describe what and why, not how
-
----
-
-## STEP 10: HEARTBEAT (IF LONG TASK)
-
-If task takes longer than 5 minutes, send heartbeat:
-
-```bash
-lra heartbeat <task_id>
-```
-
-This prevents lock timeout (10 minutes).
-
-**Best practice**: Set up automatic heartbeat every 3 minutes.
-
----
-
-## STEP 11: PUBLISH SUBTASKS (IF APPLICABLE)
-
-If you split a task into subtasks:
-
-```bash
-# Split task
-lra split <parent_task_id> --plan '[
-  {"desc": "Subtask 1", "requirements": "具体需求", "acceptance": ["验收标准1"], "deliverables": ["交付物1"]},
-  {"desc": "Subtask 2", "requirements": "具体需求", "acceptance": ["验收标准1"], "deliverables": ["交付物1"]}
-]'
-
-# Or use plan file (recommended for detailed specs)
-lra split <parent_task_id> --plan-file .long-run-agent/split_plan.json
-
-# Publish subtasks (release locks)
-lra publish <parent_task_id>
-```
-
-This allows other agents to work on subtasks.
-
----
-
-## STEP 12: UPDATE PROGRESS NOTES
-
-Record your progress for the next session:
-
-```bash
-cat >> .long-run-agent/progress.txt <<EOF
-
-## Session: $(date +%Y-%m-%d\ %H:%M:%S)
-
-**Task**: <task_id> - <description>
-
-**Completed**:
-- [What you accomplished]
-
-**Issues Found**:
-- [Any issues discovered]
-
-**Next Steps**:
-- [What should be worked on next]
-
-**Status**: <X>/<Y> tasks completed (Z%)
-
-EOF
+🤖 Generated with LRA"
 ```
 
 ---
 
-## STEP 13: END SESSION CLEANLY
+## 停止条件
 
-Before your context fills up:
+**每轮结束前检查**：
 
-1. ✅ Commit all working code
-2. ✅ Update progress notes
-3. ✅ Update task status
-4. ✅ Ensure no uncommitted changes
-5. ✅ Leave project in working state
+- 所有阶段门禁已通过？
+- 任务状态是 `completed`？
 
-```bash
-# Check for uncommitted changes
-git status
-
-# Quick verification
-lra regression-test --template code-module
+如果是，回复：
 ```
+<promise>COMPLETE</promise>
+```
+
+如果还有阶段没完成，本轮结束。下一轮从当前阶段继续。
 
 ---
 
-## TROUBLESHOOTING
+## 快速参考
 
-### Task is locked
-```bash
-lra show <task_id>  # Check lock status
-# Wait 10 minutes for timeout or contact owner
-```
-
-### Regression test failed
-```bash
-lra regression-test --report  # View report
-# Fix broken tasks before starting new work
-```
-
-### Missing evidence
-```bash
-# Add evidence to task file
-cat >> .long-run-agent/tasks/<task_id>.md <<EOF
-
-### 测试证据
-- 测试步骤: ...
-- 测试结果: ...
-- 截图: .long-run-agent/screenshots/...
-EOF
-```
-
-### Dependencies not satisfied
-```bash
-lra deps <task_id>  # Check dependencies
-# Complete dependencies first
-```
+| 操作 | 命令 |
+|------|------|
+| 推进阶段 | `lra set <id> force_next_stage` |
+| 领取任务 | `lra claim <id>` |
+| 查看任务 | `lra show <id>` |
+| 查看进度 | `lra status` |
+| 保活心跳 | `lra heartbeat <id>` |
 
 ---
 
-## IMPORTANT REMINDERS
-
-**Your Goal**: Complete all tasks with high quality
-
-**This Session's Goal**: Complete at least one task with full verification
-
-**Priority**: Fix broken tests > Complete in-progress > Start new tasks
-
-**Quality Bar**:
-- Zero errors
-- Tests passing
-- Documentation updated
-- Evidence provided
-- No regression
-
-**You have unlimited time across multiple sessions.** Focus on quality over speed.
-
----
-
-## QUICK REFERENCE
-
-| Command | Purpose |
-|---------|---------|
-| `lra status` | Project progress visualization |
-| `lra context --full` | Complete context for agent |
-| `lra claim <id>` | Lock task for work |
-| `lra show <id>` | Task details |
-| `lra set <id> <status>` | Update status |
-| `lra heartbeat <id>` | Keep lock alive |
-| `lra regression-test` | Run regression tests |
-| `lra where` | Show file locations |
-
----
-
-**Begin by running Step 1 (Get Your Bearings)!**
-
-Good luck! 🚀
+**先运行 `lra orientation`，然后 `lra context --full` 开始工作。**
