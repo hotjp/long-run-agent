@@ -843,7 +843,7 @@
         <div class="container">
             <div class="hero-content fade-in-up">
                 <span class="badge badge-new">NEW</span>
-                <span class="badge badge-v4">v5.0</span>
+                <span class="badge badge-v4">v5.1</span>
                 <h1>
                     让 Agent 长时间自动化开发<br>
                     <span class="gradient-text">不再崩溃</span>
@@ -900,6 +900,16 @@
                         </div>
                         <div class="terminal-line">
                             <span class="terminal-output">📊 项目状态: 待执行 1 | 推荐: task_001 (P0)</span>
+                        </div>
+                        <div class="terminal-line">
+                            <span class="terminal-prompt">$</span>
+                            <span class="terminal-command">lra relay --dry-run</span>
+                        </div>
+                        <div class="terminal-line">
+                            <span class="terminal-success">Would run:</span>
+                        </div>
+                        <div class="terminal-line">
+                            <span class="terminal-output">  task_001: 实现用户登录功能 ... (P0)</span>
                         </div>
                     </div>
                 </div>
@@ -1178,6 +1188,20 @@
                         <li>任务依赖管理</li>
                         <li>协作流程标准化</li>
                         <li>验收/集成机制</li>
+                    </ul>
+                </div>
+
+                <!-- Relay -->
+                <div class="feature-card" style="border-color: var(--accent-cyan);">
+                    <div class="feature-icon">🔄</div>
+                    <h3 class="feature-title">Relay 全自动接力 <span class="badge badge-new" style="font-size: 0.7rem;">v5.1</span></h3>
+                    <ul class="feature-list">
+                        <li><strong>lra relay</strong>：全自动任务循环，无需人工干预</li>
+                        <li><strong>断点续跑</strong>：每阶段完成后 git commit，崩溃可恢复</li>
+                        <li><strong>单实例文件锁</strong>：fcntl.flock 防止并发冲突</li>
+                        <li><strong>任务级锁</strong>：LocksManager claim，同一任务同时只有一个进程</li>
+                        <li><strong>无 relay branch</strong>：直接在当前分支提交，无 merge 冲突</li>
+                        <li><strong>tmux 守护</strong>：进程崩溃后 tmux session 保持，重连即续跑</li>
                     </ul>
                 </div>
 

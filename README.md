@@ -1,4 +1,4 @@
-# LRA - AI Agent Task Manager v5.1.2
+# LRA - AI Agent Task Manager v5.1.3
 
 **规范驱动 + 任务管理 + 质量保障系统 + 迭代阶段引导**
 
@@ -15,6 +15,7 @@
 - **🎯 迭代阶段引导** (v4.1.0): 7阶段渐进式优化 + 智能引导 + 安全检查
 - **🚀 Constitution机制** (v5.0.0): **规范驱动开发 + 质量门禁 + 不可协商原则**
 - **🌍 跨平台支持** (v5.0.0): **Windows / Linux / macOS 全平台兼容**
+- **🔄 Relay 全自动接力** (v5.1.0): **任务全自动执行 + 断点续跑 + 多任务串行**
 
 ## 安装
 
@@ -128,6 +129,70 @@ core_principles:
 - `docs/CONSTITUTION_DESIGN.md` - 详细设计文档
 - `CONSTITUTION_COMPLETE.md` - 功能完成报告
 
+## 🆕 Relay 全自动接力 (v5.1)
+
+### 核心概念
+
+Relay 让 `lra relay` 成为 Agent 的**自动驾驶模式**——从 `get_ready_tasks()` 获取任务 → CLAIM 加锁 → 运行 Claude agent → Constitution 验证 → `update_status()` → git commit，全部自动完成，无需人工干预。
+
+### 快速上手
+
+```bash
+# 干跑（不执行，只显示将要运行的任务）
+lra relay --dry-run
+
+# 运行 relay，最多执行 10 个任务
+lra relay --max-steps 10
+
+# 全自动运行（直到队列空或达到 max-steps）
+lra relay
+```
+
+### 崩溃恢复
+
+Relay 通过**阶段级提交**实现断点续跑：
+
+```
+task_001: stage1 commit → stage2 commit → stage3 commit → crash!
+新进程: 读取 ralph.iteration=2 → 从 stage3 续跑
+       （stage2 重复提交无害）
+```
+
+- **每阶段完成后立即 git commit**，iteration 在 commit 之后才递增
+- **锁超时 15 分钟**：进程崩溃后 15 分钟锁变为 orphan，新进程可接管
+- **接续后 iteration 对齐**：新进程从 `ralph.iteration` 指向的下一个阶段开始
+
+### 并发安全
+
+- **文件锁**（`fcntl.flock`）：同一 repo 同时只能运行一个 relay 实例
+- **任务级锁**（`LocksManager.claim`）：同一任务同时只能被一个进程 claim
+- 多 Agent 并发时，各自 claim 不同任务，提交到同一分支，无 merge 冲突
+
+### 设计原则
+
+| 原则 | 说明 |
+|------|------|
+| 无 relay branch | 所有提交直接在当前分支，简化 merge 冲突 |
+| Per-stage commit | 每个阶段完成后立即提交，崩溃不丢进度 |
+| 提交后再递增 iteration | iteration 值永远对应已 commit 的状态 |
+| 单实例文件锁 | 防止同一 repo 并发运行多个 relay |
+| 不 reset_hard | Constitution 失败后只释放锁，不回滚代码（阶段已提交） |
+
+### 工作流
+
+```bash
+# 启动 tmux session
+tmux new -s lra-relay
+
+# 在 tmux 中运行 relay
+lra relay --max-steps 100
+
+# 如果进程崩溃，tmux session 还在
+# 重新连接并运行，relay 会自动从断点续跑
+tmux attach -t lra-relay
+lra relay
+```
+
 ## 命令参考
 
 ### 核心命令
@@ -140,6 +205,8 @@ core_principles:
 | `lra constitution help` | 🆕 Constitution使用指南 |
 | `lra constitution show` | 🆕 查看Constitution配置 |
 | `lra constitution validate` | 🆕 验证Constitution有效性 |
+| `lra relay [--max-steps N]` | 🆕 全自动 relay 循环（断点续跑） |
+| `lra relay --dry-run` | 🆕 干跑（显示将执行的任务） |
 | `lra context [--output-limit Xk]` | 获取项目状态 + 可领取任务 |
 | `lra list [--status X] [--template X]` | 列出任务 |
 | `lra create <desc> --template <name>` | 创建任务 |
