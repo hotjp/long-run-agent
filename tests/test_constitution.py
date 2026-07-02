@@ -149,12 +149,12 @@ def test_gate_evaluator_command_gate():
     """测试命令门禁评估"""
     evaluator = GateEvaluator()
 
-    # 测试成功的命令
-    gate_config = {"type": "command", "name": "test_echo", "command": "echo test"}
+    # 测试成功的命令（pytest 必定存在于测试环境，且在白名单内）
+    gate_config = {"type": "command", "name": "test_cmd", "command": "pytest --version"}
 
     result = evaluator.evaluate_gate(gate_config, "test_task", {})
     assert result.passed is True
-    assert result.gate_name == "test_echo"
+    assert result.gate_name == "test_cmd"
 
 
 def test_gate_evaluator_field_gate():
