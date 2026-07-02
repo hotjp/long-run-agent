@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.2.2] - 2026-07-02
+
+### 🐛 Windows 兼容性（续 5.2.1）
+
+5.2.1 之后的补充修复，让 Windows 支持真正完整（由新增的 `windows-latest` CI 揭示）：
+
+- **subprocess 输出解码**：全部 15 处 `subprocess.run(..., text=True)` 加 `encoding="utf-8", errors="replace"`。此前 Windows 用 cp1252/charmap 解码子进程 stdout，遇到中文（git 中文 commit、pytest 中文输出、`lra` 自身输出）即 `UnicodeDecodeError` 且 stdout 变 None。
+  - 涉及：`config.py`、`cli_extensions.py`、`constitution.py`、`quality_checker.py`、`task_manager.py`、`relay/git_utils.py`、`relay/claude_adapter.py`
+
+### 🧪 测试基础设施（Windows）
+
+- **tempdir 清理崩溃**（WinError 32）：3 个集成测试 `chdir` 进 `TemporaryDirectory` 不还原，Windows 无法删除进程当前目录。新增 `tests/conftest.py` 的 `chdir_to()` 上下文管理器。
+- **CLI 测试输出解码**：测试用 `subprocess(text=True)` 解码 `lra` 中文输出失败，改用 UTF-8 + 诊断断言。
+
+### 🎨 代码质量
+
+- 应用 ruff 安全自动修复（156 处：import 排序、冗余 f-string、未用 import、冗余 open 模式等）
+- CI 中 ruff 步骤设为 advisory（剩余 112 处既有 lint 债：行长、裸 except 等，后续清理）
+
+### ✅ 验证
+
+- Windows CI 全绿：`windows-latest` × Python 3.10/3.11/3.12，81 测试全过
+- `ubuntu-latest` 同样全绿
+
+---
+
 ## [5.2.1] - 2026-07-02
 
 ### 🐛 Windows 兼容性修复

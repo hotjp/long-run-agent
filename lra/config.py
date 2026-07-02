@@ -13,8 +13,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from filelock import FileLock as _FileLock
 
-CURRENT_VERSION = "5.2.1"
-LRA_VERSION = "5.2.1"
+CURRENT_VERSION = "5.2.2"
+LRA_VERSION = "5.2.2"
 SCHEMA_VERSION = "2026-02-25"
 
 
