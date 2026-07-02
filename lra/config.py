@@ -249,16 +249,16 @@ class GitHelper:
     def get_current_commit() -> Dict[str, str]:
         result = {"hash": "", "branch": "", "message": "", "author": ""}
         try:
-            r = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True)
+            r = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, encoding="utf-8", errors="replace")
             if r.returncode == 0:
                 result["hash"] = r.stdout.strip()[:7]
-            r = subprocess.run(["git", "branch", "--show-current"], capture_output=True, text=True)
+            r = subprocess.run(["git", "branch", "--show-current"], capture_output=True, text=True, encoding="utf-8", errors="replace")
             if r.returncode == 0:
                 result["branch"] = r.stdout.strip()
-            r = subprocess.run(["git", "log", "-1", "--pretty=%B"], capture_output=True, text=True)
+            r = subprocess.run(["git", "log", "-1", "--pretty=%B"], capture_output=True, text=True, encoding="utf-8", errors="replace")
             if r.returncode == 0:
                 result["message"] = r.stdout.strip()[:100]
-            r = subprocess.run(["git", "log", "-1", "--pretty=%an"], capture_output=True, text=True)
+            r = subprocess.run(["git", "log", "-1", "--pretty=%an"], capture_output=True, text=True, encoding="utf-8", errors="replace")
             if r.returncode == 0:
                 result["author"] = r.stdout.strip()
         except:
@@ -270,7 +270,7 @@ class GitHelper:
         files = []
         try:
             r = subprocess.run(
-                ["git", "diff", "--numstat", "HEAD~1", "HEAD"], capture_output=True, text=True
+                ["git", "diff", "--numstat", "HEAD~1", "HEAD"], capture_output=True, text=True, encoding="utf-8", errors="replace"
             )
             if r.returncode == 0:
                 for line in r.stdout.strip().split("\n"):
@@ -293,7 +293,7 @@ class GitHelper:
         files = []
         try:
             r = subprocess.run(
-                ["git", "diff", "--numstat", "--cached"], capture_output=True, text=True
+                ["git", "diff", "--numstat", "--cached"], capture_output=True, text=True, encoding="utf-8", errors="replace"
             )
             if r.returncode == 0:
                 for line in r.stdout.strip().split("\n"):

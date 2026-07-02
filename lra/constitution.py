@@ -319,7 +319,7 @@ class GateEvaluator:
             )
 
         try:
-            result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=60)
+            result = subprocess.run(command, shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
 
             passed = result.returncode == 0
 
@@ -455,7 +455,7 @@ class GateEvaluator:
                     f"--cov-fail-under={min_coverage}",
                 ],
                 capture_output=True,
-                text=True,
+                text=True, encoding="utf-8", errors="replace",
                 timeout=120,
             )
 

@@ -19,7 +19,7 @@ class GitUtils:
                 ["git", *args],
                 cwd=str(cwd),
                 capture_output=True,
-                text=True,
+                text=True, encoding="utf-8", errors="replace",
                 check=check,
             )
         except subprocess.CalledProcessError as e:
@@ -31,7 +31,7 @@ class GitUtils:
             ["git", "rev-parse", "--is-inside-work-tree"],
             cwd=str(cwd),
             capture_output=True,
-            text=True,
+            text=True, encoding="utf-8", errors="replace",
         )
         return result.returncode == 0 and result.stdout.strip() == "true"
 

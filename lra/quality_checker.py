@@ -586,7 +586,7 @@ class QualityChecker:
             r = subprocess.run(
                 [sys.executable, "-m", "pytest", "--co", "-q"],
                 capture_output=True,
-                text=True,
+                text=True, encoding="utf-8", errors="replace",
                 timeout=30,
                 cwd=str(self.project_path),
             )
@@ -637,7 +637,7 @@ class QualityChecker:
             r = subprocess.run(
                 [sys.executable, "-m", "ruff", "check", "--statistics", "."],
                 capture_output=True,
-                text=True,
+                text=True, encoding="utf-8", errors="replace",
                 timeout=30,
                 cwd=str(self.project_path),
             )

@@ -201,7 +201,7 @@ class CLIExtensions:
             import subprocess
 
             result = subprocess.run(
-                ["git", "log", "--oneline", f"-{count}"], capture_output=True, text=True, timeout=5
+                ["git", "log", "--oneline", f"-{count}"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5
             )
             if result.returncode == 0:
                 commits = result.stdout.strip().split("\n")

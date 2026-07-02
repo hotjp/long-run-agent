@@ -89,7 +89,7 @@ class ClaudeAdapter:
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True,
+            text=True, encoding="utf-8", errors="replace",
             start_new_session=(sys.platform != "win32"),
         )
 
