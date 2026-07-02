@@ -14,7 +14,9 @@ from conftest import chdir_to
 
 def run_cmd(cmd):
     """运行命令并返回 (returncode, stdout, stderr)"""
-    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    result = subprocess.run(
+        cmd, shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace"
+    )
     return result.returncode, result.stdout, result.stderr
 
 
