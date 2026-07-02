@@ -11,6 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from conftest import chdir_to
 from lra.task_manager import TaskManager
 
 
@@ -18,9 +19,7 @@ def test_check_stage_stuck():
     """测试 check_stage_stuck 方法"""
     print("测试 check_stage_stuck 方法...")
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        os.chdir(tmpdir)
-
+    with tempfile.TemporaryDirectory() as tmpdir, chdir_to(tmpdir):
         tm = TaskManager()
 
         tm.init_project("test-project", "task")
@@ -55,9 +54,7 @@ def test_force_next_stage_logic():
     """测试强制进入下一阶段的逻辑"""
     print("测试强制进入下一阶段逻辑...")
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        os.chdir(tmpdir)
-
+    with tempfile.TemporaryDirectory() as tmpdir, chdir_to(tmpdir):
         tm = TaskManager()
         tm.init_project("test-project", "task")
 

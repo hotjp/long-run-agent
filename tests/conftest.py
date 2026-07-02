@@ -1,8 +1,28 @@
 """Shared pytest fixtures and test-isolation safety nets."""
 
+import contextlib
 import os
 
 import pytest
+
+
+@contextlib.contextmanager
+def chdir_to(path):
+    """chdir into `path` and restore the original cwd on exit.
+
+    Required on Windows: deleting a directory that is the current process
+    cwd raises PermissionError (WinError 32), which breaks
+    ``tempfile.TemporaryDirectory`` cleanup. Any test that chdirs into a
+    tempdir must restore cwd *before* the tempdir is cleaned up — this
+    helper does that, so ``with TemporaryDirectory() as d, chdir_to(d):``
+    is Windows-safe.
+    """
+    orig = os.getcwd()
+    os.chdir(path)
+    try:
+        yield
+    finally:
+        os.chdir(orig)
 
 
 @pytest.fixture(autouse=True)
