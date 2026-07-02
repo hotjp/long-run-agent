@@ -26,7 +26,7 @@ class RWLock:
         """确保锁文件存在"""
         os.makedirs(os.path.dirname(self.lock_path) or ".", exist_ok=True)
         if not os.path.exists(self.lock_path):
-            with open(self.lock_path, "w") as f:
+            with open(self.lock_path, "w", encoding="utf-8") as f:
                 pass
 
     def acquire_read(self):

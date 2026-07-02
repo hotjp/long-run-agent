@@ -52,7 +52,7 @@ class BatchLockManager:
         """保存 agent_id 到文件，用于跨进程保持一致性"""
         agent_file = os.path.join(os.path.dirname(self.lock_path), ".batch_lock_agent")
         try:
-            with open(agent_file, "w") as f:
+            with open(agent_file, "w", encoding="utf-8") as f:
                 f.write(agent_id)
         except:
             pass  # 忽略写入失败
@@ -62,7 +62,7 @@ class BatchLockManager:
         agent_file = os.path.join(os.path.dirname(self.lock_path), ".batch_lock_agent")
         try:
             if os.path.exists(agent_file):
-                with open(agent_file, "r") as f:
+                with open(agent_file, "r", encoding="utf-8") as f:
                     return f.read().strip()
         except:
             pass

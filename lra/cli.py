@@ -252,7 +252,7 @@ class LRACLI:
                 f"LRA_VERSION={LRA_VERSION}\n"
                 f"INITIALIZED={dt.now().strftime('%Y-%m-%dT%H:%M:%SZ')}\n"
             )
-            with open(version_path, "w") as f:
+            with open(version_path, "w", encoding="utf-8") as f:
                 f.write(version_content)
         except Exception:
             pass  # Non-fatal
@@ -3291,6 +3291,15 @@ class LRACLI:
 
 
 def main():
+    # Ensure emoji/CJK output renders on legacy Windows consoles (conhost
+    # defaults to cp436/cp936). Harmless on Windows Terminal / macOS / Linux.
+    if sys.platform == "win32":
+        try:
+            sys.stdout.reconfigure(encoding="utf-8")
+            sys.stderr.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
+
     parser = argparse.ArgumentParser(
         description="LRA v5.1.2 - AI Agent Task Manager with Quality Assurance",
         formatter_class=argparse.RawDescriptionHelpFormatter,

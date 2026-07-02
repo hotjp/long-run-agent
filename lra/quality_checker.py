@@ -7,6 +7,7 @@ v2.0 - 多模板质量检查系统
 import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime
@@ -213,7 +214,7 @@ class QualityChecker:
 
     def _analyze_python_docs(self, file_path: Path) -> Tuple[int, int, int, int]:
         """分析Python文件的文档覆盖"""
-        content = file_path.read_text()
+        content = file_path.read_text(encoding="utf-8")
 
         # 简化检测：统计函数和类定义
         func_pattern = r"^\s*def\s+\w+"
@@ -237,7 +238,7 @@ class QualityChecker:
 
         for file_path in code_files[:10]:  # 只检查前10个文件
             try:
-                lines = file_path.read_text().split("\n")
+                lines = file_path.read_text(encoding="utf-8").split("\n")
                 total_lines += len(lines)
 
                 # 简化：检查超长文件
@@ -272,7 +273,7 @@ class QualityChecker:
         for file_path in code_files[:5]:  # 只检查前5个文件
             if file_path.suffix == ".py":
                 try:
-                    content = file_path.read_text()
+                    content = file_path.read_text(encoding="utf-8")
 
                     # 检查单字母变量（简化）
                     single_letter_vars = len(re.findall(r"\b[a-z]\s*=", content))
@@ -585,7 +586,7 @@ class QualityChecker:
 
         try:
             r = subprocess.run(
-                ["pytest", "--co", "-q"],
+                [sys.executable, "-m", "pytest", "--co", "-q"],
                 capture_output=True,
                 text=True,
                 timeout=30,
@@ -636,7 +637,7 @@ class QualityChecker:
 
         try:
             r = subprocess.run(
-                ["ruff", "check", "--statistics", "."],
+                [sys.executable, "-m", "ruff", "check", "--statistics", "."],
                 capture_output=True,
                 text=True,
                 timeout=30,

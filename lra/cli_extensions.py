@@ -323,7 +323,7 @@ class CLIExtensions:
                 # 从任务文件读取测试步骤
                 task_file = Config.get_tasks_dir() / f"{task_id}.md"
                 if task_file.exists():
-                    content = task_file.read_text()
+                    content = task_file.read_text(encoding="utf-8")
                     # 简化：提取测试步骤
                     test_steps = ["步骤1: 打开应用", "步骤2: 执行测试"]
                     script_path = automation.save_verification_script(task_id, test_steps)

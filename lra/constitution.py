@@ -7,6 +7,7 @@ v1.0 - 初始实现
 
 import re
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -445,8 +446,14 @@ class GateEvaluator:
 
         try:
             result = subprocess.run(
-                f"pytest --cov=lra --cov-report=term-missing --cov-fail-under={min_coverage}",
-                shell=True,
+                [
+                    sys.executable,
+                    "-m",
+                    "pytest",
+                    "--cov=lra",
+                    "--cov-report=term-missing",
+                    f"--cov-fail-under={min_coverage}",
+                ],
                 capture_output=True,
                 text=True,
                 timeout=120,
@@ -538,7 +545,7 @@ class GateEvaluator:
                             continue
 
                         if check_level == "basic" and self._is_code_file(file_path):
-                            if not self._has_basic_code_patterns(open(file_path).read()):
+                            if not self._has_basic_code_patterns(open(file_path, encoding="utf-8").read()):
                                 invalid_files.append(d)
 
             # 汇总错误

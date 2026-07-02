@@ -144,7 +144,7 @@ class BrowserAutomation:
         # 检查任务文件中的测试证据
         task_file = Path(Config.get_tasks_dir()) / f"{task_id}.md"
         if task_file.exists():
-            content = task_file.read_text()
+            content = task_file.read_text(encoding="utf-8")
             if "测试证据" in content or "验证证据" in content:
                 evidence["has_manual_test"] = True
             if "测试结果" in content:

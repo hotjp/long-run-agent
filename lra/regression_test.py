@@ -117,7 +117,7 @@ class RegressionTestManager:
             result["checks"]["file_exists"] = False
             return result
 
-        content = task_file.read_text()
+        content = task_file.read_text(encoding="utf-8")
 
         # 检查1: 是否有测试证据
         has_evidence = self._check_test_evidence(content)
@@ -212,9 +212,9 @@ class RegressionTestManager:
             # 其他模板：添加标记到任务文件
             task_file = Path(Config.get_tasks_dir()) / f"{task_id}.md"
             if task_file.exists():
-                content = task_file.read_text()
+                content = task_file.read_text(encoding="utf-8")
                 warning = f"\n\n## ⚠️ 回归测试失败\n\n**原因**: {reason}\n**时间**: {datetime.now().isoformat()}\n"
-                task_file.write_text(content + warning)
+                task_file.write_text(content + warning, encoding="utf-8")
 
     def _save_results(self, results: Dict[str, Any]):
         """保存回归测试结果"""
