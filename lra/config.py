@@ -82,6 +82,12 @@ class Config:
 
     @classmethod
     def get_metadata_dir(cls) -> str:
+        # LRA_CONFIG_DIR overrides the default metadata location — enables
+        # test isolation (point at a tempdir) and custom install paths.
+        # No effect in production unless explicitly set.
+        env_dir = os.environ.get("LRA_CONFIG_DIR")
+        if env_dir:
+            return os.path.abspath(env_dir)
         return os.path.abspath(cls.METADATA_DIR)
 
     @classmethod
@@ -210,7 +216,6 @@ class SafeJson:
         Prevents file corruption on crash/power loss.
         """
         import tempfile
-        import shutil
 
         dir_path = os.path.dirname(path)
         if dir_path:
@@ -223,7 +228,7 @@ class SafeJson:
                 json.dump(data, f, indent=2, ensure_ascii=False)
                 f.flush()
                 os.fsync(f.fileno())  # Ensure data is on disk
-            shutil.move(tmp_path, path)  # Atomic rename
+            os.replace(tmp_path, path)  # Atomic cross-platform rename (overwrites)
             return True
         except:
             # Clean up temp file on failure
