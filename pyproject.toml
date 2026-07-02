@@ -53,7 +53,7 @@ Repository = "https://github.com/clawdbot-ai/long-run-agent"
 Issues = "https://github.com/clawdbot-ai/long-run-agent/issues"
 
 [tool.setuptools]
-packages = ["lra"]
+packages = ["lra", "lra.relay"]
 
 [tool.setuptools.package-data]
 lra = ["py.typed", "prompts/*.md"]
