@@ -1,8 +1,8 @@
 """
-LRA - AI Agent Task Manager with Quality Assurance v5.2.0
+LRA - AI Agent Task Manager with Quality Assurance v5.2.1
 """
 
-__version__ = "5.2.0"
+__version__ = "5.2.1"
 __author__ = "LRA Contributors"
 
 from lra.config import Config, SafeJson, GitHelper, CURRENT_VERSION

@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.2.1] - 2026-07-02
+
+### 🐛 Windows 兼容性修复
+
+修复在 Windows 上运行 LRA 的多个问题（此前在 Windows 上无法正常使用）：
+
+- **relay 导入即崩**：`relay/orchestrator.py` 顶层 `import fcntl`（POSIX-only）改用跨平台 `filelock` 库
+- **claude CLI 启动失败**：`claude_adapter.py` 用 `shutil.which` 解析二进制，让 Windows 找到 `claude.cmd`（npm 安装为 `.cmd`，`CreateProcess` 无法直接执行）
+- **中文/emoji 崩溃**：约 12 处文本 I/O 显式指定 `encoding="utf-8"`（Windows 默认 cp1252/gbk）
+- **非原子改名**：`SafeJson.write` 用 `os.replace` 替代 `shutil.move`（后者在 Windows 覆盖已存在文件时退化为 copy+delete）
+- **打包缺失**：`pyproject.toml` 补全 `lra.relay` 子包（此前 `pip install` 不安装 relay）
+- **工具调用稳健**：pytest/ruff 改用 `sys.executable -m` 调用，避免依赖 PATH 里的 `.bat`/`.cmd`
+- **终端显示**：`main()` 在 Windows 重配置 stdout/stderr 为 UTF-8，让 emoji/中文在老 conhost 正常显示
+
+### 🧪 测试修复
+
+- `Config.get_metadata_dir` 支持 `LRA_CONFIG_DIR` 环境变量（测试隔离 + 自定义元数据目录）
+- 新增 `tests/conftest.py` cwd 隔离 fixture，消除测试间状态污染（此前整体跑有 43 errors）
+- 修复 3 个 `test_constitution` 失败
+
+### 🔧 CI
+
+- 新增多 OS 测试矩阵：`ubuntu-latest` + `windows-latest`，Python 3.10/3.11/3.12，跑 `ruff check` + `pytest`
+
+---
+
 ## [5.2.0] - 2026-04-28
 
 ### 🎉 重大功能：LRA Relay — 全自主 Agent 中继
