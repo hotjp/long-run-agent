@@ -6,10 +6,10 @@ v3.1 - 支持层级锁、多 Agent 协调
 
 import os
 from datetime import datetime, timedelta
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from uuid import uuid4
 
-from lra.config import Config, SafeJson, HEARTBEAT_INTERVAL_MINUTES, ORPHAN_THRESHOLD_MINUTES
+from lra.config import ORPHAN_THRESHOLD_MINUTES, Config, SafeJson
 from lra.task_manager import TaskManager
 
 

@@ -6,9 +6,9 @@ v3.0 - Git 自动同步、精简输出
 
 import os
 from datetime import datetime
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List, Optional
 
-from lra.config import Config, SafeJson, GitHelper
+from lra.config import Config, GitHelper, SafeJson
 
 
 class RecordsManager:

@@ -8,12 +8,11 @@ import os
 import re
 import subprocess
 import sys
-from pathlib import Path
-from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 from lra.config import Config, SafeJson
-
 
 QUALITY_GATES = {
     "code-module": [
@@ -357,7 +356,6 @@ class QualityChecker:
 
     def _get_timestamp(self) -> str:
         """获取当前时间戳"""
-        from datetime import datetime
 
         return datetime.now().isoformat()
 
@@ -702,7 +700,7 @@ class QualityChecker:
             return result
 
         try:
-            with open(task_path, "r", encoding="utf-8") as f:
+            with open(task_path, encoding="utf-8") as f:
                 content = f.read()
 
             acceptance_patterns = [

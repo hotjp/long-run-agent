@@ -10,16 +10,13 @@ v1.0 - 多语言支持
 - 生成结构化文档
 """
 
+import ast
+import json
 import os
 import re
-import json
-import ast
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, Any, List, Optional, Tuple
-from dataclasses import dataclass, asdict
-from pathlib import Path
-
-from lra.config import Config
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
@@ -82,7 +79,7 @@ class PythonParser:
         return any(file_path.endswith(ext) for ext in self.extensions)
 
     def parse_file(self, file_path: str) -> FileInfo:
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+        with open(file_path, encoding="utf-8", errors="ignore") as f:
             content = f.read()
 
         try:
@@ -223,7 +220,7 @@ class JavaScriptParser:
         return any(file_path.endswith(ext) for ext in self.extensions)
 
     def parse_file(self, file_path: str) -> FileInfo:
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+        with open(file_path, encoding="utf-8", errors="ignore") as f:
             content = f.read()
 
         classes = self._extract_classes(content, file_path)
@@ -347,7 +344,7 @@ class GoParser:
         return file_path.endswith(".go")
 
     def parse_file(self, file_path: str) -> FileInfo:
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+        with open(file_path, encoding="utf-8", errors="ignore") as f:
             content = f.read()
 
         return FileInfo(

@@ -11,12 +11,11 @@ v3.3.0 - Agent 自治式初始化预检
 - 自动决策（全量/增量）
 """
 
+import json
 import os
 import re
-import json
 from datetime import datetime
-from typing import Dict, Any, List, Optional, Tuple
-from pathlib import Path
+from typing import Any, Dict, List, Tuple
 
 try:
     from git import Repo
@@ -25,7 +24,6 @@ try:
 except ImportError:
     HAS_GIT = False
 
-from lra.config import Config, SafeJson
 
 
 class SystemCheckTask:
@@ -61,7 +59,7 @@ class SystemCheckTask:
             try:
                 import yaml
 
-                with open(config_path, "r", encoding="utf-8") as f:
+                with open(config_path, encoding="utf-8") as f:
                     return yaml.safe_load(f) or {}
             except:
                 pass
@@ -213,7 +211,7 @@ class SystemCheckTask:
                 if file.endswith(".py"):
                     file_path = os.path.join(root, file)
                     try:
-                        with open(file_path, "r", encoding="utf-8") as f:
+                        with open(file_path, encoding="utf-8") as f:
                             content = f.read()
 
                         # 简单统计：查找 def 关键字和紧随的 docstring
@@ -388,7 +386,7 @@ class ConfigManager:
         config_path = cls.get_config_path(project_path)
         if os.path.exists(config_path):
             try:
-                with open(config_path, "r", encoding="utf-8") as f:
+                with open(config_path, encoding="utf-8") as f:
                     config = json.load(f)
                     # 合并默认配置
                     merged = cls.DEFAULT_CONFIG.copy()

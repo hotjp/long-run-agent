@@ -4,28 +4,28 @@ LRA CLI v5.2.1
 AI Agent 任务管理 + 质量保障
 """
 
-import os
-import sys
-import json
 import argparse
+import json
+import os
 import random
+import sys
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from lra.config import CURRENT_VERSION, Config, validate_project_initialized, get_agent_id
+from lra.batch_lock_manager import BatchLockManager
+from lra.cli_extensions import CLIExtensions
+from lra.config import CURRENT_VERSION, Config, get_agent_id, validate_project_initialized
+from lra.errors import get_error_with_action
+from lra.locks_manager import LocksManager
+from lra.parsers import parse_dependencies, parse_variables
+from lra.quality_checker import QualityChecker
+from lra.records_manager import RecordsManager
 from lra.task_manager import TaskManager
 from lra.template_manager import TemplateManager
-from lra.records_manager import RecordsManager
-from lra.locks_manager import LocksManager
-from lra.batch_lock_manager import BatchLockManager
 from lra.tips import TIPS_CONFIG
-from lra.cli_extensions import CLIExtensions
-from lra.quality_checker import QualityChecker
-from lra.errors import get_error_with_action
-from lra.parsers import parse_dependencies, parse_variables
 
 try:
-    from lra.system_check import SystemCheckTask, ConfigManager
+    from lra.system_check import SystemCheckTask
 
     HAS_SYSTEM_CHECK = True
 except:
@@ -139,7 +139,8 @@ class LRACLI:
     def _check_project(self) -> bool:
         """检查项目是否初始化，智能检测常见问题"""
         import os
-        from lra.config import Config, SafeJson
+
+        from lra.config import Config
 
         ok, _ = validate_project_initialized()
         if not ok:
@@ -151,9 +152,9 @@ class LRACLI:
                 try:
                     task_files = [f for f in os.listdir(tasks_dir) if f.endswith(".md")]
                     if task_files:
-                        print(f"⚠️  检测到任务文件但索引损坏")
+                        print("⚠️  检测到任务文件但索引损坏")
                         print(f"   发现 {len(task_files)} 个任务文件")
-                        print(f"💡 建议运行：lra recover")
+                        print("💡 建议运行：lra recover")
                         print()
                 except:
                     pass
@@ -171,7 +172,7 @@ class LRACLI:
         quiet: bool = False,
         json_mode: bool = False,
     ):
-        from lra.config import LRA_VERSION, is_initialized, check_existing_data, Config
+        from lra.config import LRA_VERSION, Config, check_existing_data, is_initialized
 
         # Default name to current directory name
         if not name:
@@ -194,9 +195,9 @@ class LRACLI:
                         json_mode,
                     )
                     return
-                print(f"⚠️  项目已初始化 (.long-run-agent 存在)")
+                print("⚠️  项目已初始化 (.long-run-agent 存在)")
                 print(f"   现有任务: {task_count} 个")
-                print(f"   使用 --force 重新初始化（会销毁现有数据）")
+                print("   使用 --force 重新初始化（会销毁现有数据）")
                 return
 
             # Force re-initialization - safety confirmation
@@ -225,7 +226,7 @@ class LRACLI:
                     return
             else:
                 # Interactive mode
-                print(f"⚠️  WARNING: 重新初始化将销毁现有数据库")
+                print("⚠️  WARNING: 重新初始化将销毁现有数据库")
                 print(f"   现有任务: {task_count} 个")
                 confirm = input(f"请输入 'destroy {task_count} tasks' 以确认: ")
                 if confirm != f"destroy {task_count} tasks":
@@ -260,10 +261,10 @@ class LRACLI:
         if not quiet:
             print(f"✅ 项目已初始化：{name}\n")
             print(f"默认模板：{template}")
-            print(f"\n📋 下一步:")
-            print(f"   lra ready                  # 查看可用任务（推荐）")
-            print(f"   lra context                # 查看项目状态")
-            print(f'   lra create "任务描述"      # 创建第一个任务')
+            print("\n📋 下一步:")
+            print("   lra ready                  # 查看可用任务（推荐）")
+            print("   lra context                # 查看项目状态")
+            print('   lra create "任务描述"      # 创建第一个任务')
 
             # 🆕 自动创建Constitution
             from lra.constitution import init_constitution
@@ -289,7 +290,6 @@ class LRACLI:
         - agent.md: 不存在则创建，存在但无 LRA section 则更新
         - CLAUDE.md: 不存在则创建，存在但无 LRA section 则更新
         """
-        import shutil
 
         lra_dir = os.path.dirname(os.path.abspath(__file__))
         templates_dir = os.path.join(lra_dir, "templates", "agents", "defaults")
@@ -302,7 +302,7 @@ class LRACLI:
         if os.path.exists(lra_dst):
             existing_profile = self._get_profile_from_section(lra_dst, "BEGIN LRA INTEGRATION")
             if existing_profile == "full" and profile == "minimal":
-                print(f"\n⚠️  已存在 full profile 的 lra.md，不会降级为 minimal")
+                print("\n⚠️  已存在 full profile 的 lra.md，不会降级为 minimal")
                 # 仍然创建 agent.md 和 CLAUDE.md
                 self._copy_agent_and_claude(None, None, templates_dir, dst_dir)
                 return
@@ -315,7 +315,7 @@ class LRACLI:
         # 2. agent.md 和 CLAUDE.md
         self._copy_agent_and_claude(None, None, templates_dir, dst_dir)
 
-        print(f"\n📄 Agent 指南已创建: lra.md, agent.md, CLAUDE.md")
+        print("\n📄 Agent 指南已创建: lra.md, agent.md, CLAUDE.md")
 
     def _copy_agent_and_claude(self, agent_dst, claude_dst, templates_dir, dst_dir):
         """复制 agent.md 和 CLAUDE.md"""
@@ -353,7 +353,7 @@ class LRACLI:
         if not os.path.exists(file_path):
             return None
 
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, encoding='utf-8') as f:
             content = f.read()
 
         # 从 BEGIN 行中查找 profile 标记
@@ -412,17 +412,16 @@ class LRACLI:
             - allow_replace=True (lra.md): 替换 section 部分
             - allow_replace=False (agent.md/CLAUDE.md): 保持不变
         """
-        import re
         import shutil
 
         if not os.path.exists(dst):
             shutil.copy2(src, dst)
             return
 
-        with open(dst, 'r', encoding='utf-8') as f:
+        with open(dst, encoding='utf-8') as f:
             existing = f.read()
 
-        with open(src, 'r', encoding='utf-8') as f:
+        with open(src, encoding='utf-8') as f:
             template = f.read()
 
         # 如果没有 section 标记，追加
@@ -972,8 +971,8 @@ class LRACLI:
             else:
                 # 如果没有提供设计，显示警告
                 if not vars_dict:
-                    print(f"⚠️ 警告: 未填写设计，其他 agent 无法认领")
-                    print(f"   请用以下命令重新创建并填写设计:")
+                    print("⚠️ 警告: 未填写设计，其他 agent 无法认领")
+                    print("   请用以下命令重新创建并填写设计:")
                     print(
                         f'   lra create "{description}" -var \'{{"requirements":"...","acceptance":["..."],"design":"..."}}\''
                     )
@@ -989,7 +988,7 @@ class LRACLI:
                     ]
                     if len(other_incremental) == 0:
                         # 首次创建，显示详细提示
-                        print(f"💡 增量模式：'-模块'自动添加")
+                        print("💡 增量模式：'-模块'自动添加")
 
                 # 显示任务创建成功信息
                 template = result.get("template", "task") or "task"
@@ -1012,10 +1011,10 @@ class LRACLI:
         else:
             # v3.3.3: 严重错误才显示
             if result.get("error") == "cycle_dependency":
-                print(f"❌ 错误：循环依赖")
+                print("❌ 错误：循环依赖")
                 print(f"   依赖路径：{' → '.join(result.get('path', []))}")
-                print(f"\n✅ 解决方案：")
-                print(f"   请检查依赖关系，避免循环")
+                print("\n✅ 解决方案：")
+                print("   请检查依赖关系，避免循环")
             else:
                 output(result, json_mode)
 
@@ -1093,7 +1092,7 @@ class LRACLI:
                                 json_mode,
                             )
                         else:
-                            print(f"✅ 任务已创建并拆分")
+                            print("✅ 任务已创建并拆分")
                             print(f"📋 父任务: {task_id}")
                             print(f"🎯 已认领第一个子任务: {child_id}")
                             print(f"📦 所有子任务: {', '.join([c.get('id') for c in children])}")
@@ -1358,7 +1357,7 @@ class LRACLI:
             print()
 
         real_status = self.task_manager.get_real_status(task_id)
-        print(f"\n### 下一步操作\n")
+        print("\n### 下一步操作\n")
         if real_status == "completed":
             print("质量检查未通过，需要优化代码")
             print(f"建议: lra quality-check {task_id}  # 查看详细质量报告")
@@ -1366,7 +1365,7 @@ class LRACLI:
             if iteration < max_iterations:
                 remaining = max_iterations - iteration
                 print(f"继续优化 (剩余 {remaining} 次迭代)")
-                print(f"建议: 根据上述失败项进行修复")
+                print("建议: 根据上述失败项进行修复")
             else:
                 print("已达到优化上限")
                 print(f"建议: 人工审核后执行 lra set {task_id} force_completed")
@@ -1436,7 +1435,7 @@ class LRACLI:
                 if next_transitions:
                     print(f"   可用状态流转：→ {', '.join(next_transitions)}")
                 else:
-                    print(f"   已到达终态")
+                    print("   已到达终态")
 
                 if status == "completed":
                     self._run_quality_check_on_complete(task_id, template, json_mode)
@@ -1456,7 +1455,7 @@ class LRACLI:
 
                 print(f"\n❌ {err['message']}")
                 print(f"   任务: {task_id}")
-                print(f"   状态: 自动进入 optimizing (优化中)\n")
+                print("   状态: 自动进入 optimizing (优化中)\n")
 
                 print("📋 失败项:\n")
                 for i, failure in enumerate(failures[:5], 1):
@@ -1493,7 +1492,7 @@ class LRACLI:
 
     def _run_quality_check_on_complete(self, task_id: str, template: str, json_mode: bool):
         """完成任务时自动运行质量检查"""
-        print(f"\n🔍 自动运行质量检查...\n")
+        print("\n🔍 自动运行质量检查...\n")
 
         try:
             qc = QualityChecker()
@@ -1512,25 +1511,25 @@ class LRACLI:
                 iteration = early_details.get("iteration", 1)
                 max_iterations = early_details.get("max_iterations", 7)
 
-                print(f"✅ 质量检查全部通过")
+                print("✅ 质量检查全部通过")
                 print(f"   得分: {score}/{max_score}")
 
                 if iteration < max_iterations:
                     print(f"\n🎉 恭喜！任务可提前完成（迭代 {iteration}/{max_iterations}）")
-                    print(f"\n💡 你已完成所有必需的质量检查，可以选择：")
-                    print(f"   1. 提前完成（推荐）")
-                    print(f"   2. 继续优化（可选）")
+                    print("\n💡 你已完成所有必需的质量检查，可以选择：")
+                    print("   1. 提前完成（推荐）")
+                    print("   2. 继续优化（可选）")
                     print()
                 else:
                     print()
 
                 success, _ = self.task_manager.update_status(task_id, "truly_completed", force=True)
                 if success:
-                    print(f"✅ 状态已自动更新为: truly_completed")
+                    print("✅ 状态已自动更新为: truly_completed")
                     if iteration < max_iterations:
-                        print(f"   任务已提前完成！")
+                        print("   任务已提前完成！")
             elif failed_required:
-                print(f"❌ 质量检查未通过:")
+                print("❌ 质量检查未通过:")
                 for check in checks:
                     if not check.get("passed") and check.get("required"):
                         check_type = check.get("type", "unknown")
@@ -1553,42 +1552,42 @@ class LRACLI:
 
                     print(f"\n⚠️  警告：在【{stage_name}】阶段已尝试 {stuck_count} 次")
                     print(f"   当前迭代: {iteration}/{max_iterations}")
-                    print(f"\n❌ 质量检查仍未通过:")
+                    print("\n❌ 质量检查仍未通过:")
                     for check in failed_required:
                         print(f"   • {check}")
 
-                    print(f"\n💡 建议选项：")
-                    print(f"   1. 强制进入下一阶段（放弃当前阶段目标）")
+                    print("\n💡 建议选项：")
+                    print("   1. 强制进入下一阶段（放弃当前阶段目标）")
                     print(f"      执行: lra set {task_id} force_next_stage")
-                    print(f"   2. 继续尝试当前阶段")
+                    print("   2. 继续尝试当前阶段")
                     print(f"      继续工作并提交: lra set {task_id} completed")
 
                 success, new_iter = self.task_manager.increment_iteration(task_id)
                 if success:
                     self._record_quality_check_result(task_id, result)
                     print(f"\n进入优化循环 ({new_iter}/{max_iterations})")
-                    print(f"\n💡 建议操作:")
+                    print("\n💡 建议操作:")
                     print(f"   lra show {task_id}          # 查看详细优化状态")
                     print(f"   lra quality-check {task_id} # 查看完整质量报告")
 
                     success, _ = self.task_manager.update_status(task_id, "optimizing", force=True)
                     if success:
-                        print(f"\n状态已自动更新为: optimizing")
+                        print("\n状态已自动更新为: optimizing")
                 else:
                     print(f"\n⚠️  已达到优化上限 ({max_iterations} 次)")
                     print(f"建议人工审核后执行: lra set {task_id} force_completed")
             else:
-                print(f"✅ 质量检查通过")
+                print("✅ 质量检查通过")
                 print(f"   得分: {score}/{max_score}")
                 self._record_quality_check_result(task_id, result)
 
                 success, _ = self.task_manager.update_status(task_id, "truly_completed", force=True)
                 if success:
-                    print(f"\n状态已自动更新为: truly_completed")
+                    print("\n状态已自动更新为: truly_completed")
 
         except Exception as e:
             print(f"⚠️  质量检查失败: {str(e)}")
-            print(f"   任务状态保持: completed")
+            print("   任务状态保持: completed")
 
     def _record_quality_check_result(self, task_id: str, result: Dict[str, Any]):
         """记录质量检查结果到任务的 ralph 状态"""
@@ -1630,7 +1629,7 @@ class LRACLI:
     def _force_next_stage(self, task_id: str, json_mode: bool):
         """强制进入下一阶段"""
         if not json_mode:
-            print(f"\n🚀 强制进入下一阶段...\n")
+            print("\n🚀 强制进入下一阶段...\n")
 
         task = self.task_manager.get(task_id)
         if not task:
@@ -1679,7 +1678,7 @@ class LRACLI:
 
             print(f"\n💡 提示: 查看完整引导: lra show {task_id}")
         else:
-            print(f"❌ 强制进入下一阶段失败")
+            print("❌ 强制进入下一阶段失败")
 
     def _get_final_states_for_task(self, task_id: str) -> List[str]:
         task = self.task_manager.get(task_id)
@@ -1707,7 +1706,7 @@ class LRACLI:
             return False, []
 
         try:
-            with open(task_path, "r", encoding="utf-8") as f:
+            with open(task_path, encoding="utf-8") as f:
                 content = f.read()
         except:
             return False, []
@@ -1791,7 +1790,7 @@ class LRACLI:
                 output({"error": "plan_file_not_found", "file": plan_file}, json_mode)
                 return
             try:
-                with open(plan_file, "r", encoding="utf-8") as f:
+                with open(plan_file, encoding="utf-8") as f:
                     plan_content = f.read()
                 split_plan = json.loads(plan_content)
             except json.JSONDecodeError as e:
@@ -1899,8 +1898,9 @@ class LRACLI:
 """)
 
         print("\n📄 子任务详情文件:")
-        from lra.config import Config
         import os
+
+        from lra.config import Config
 
         metadata_dir = Config.get_metadata_dir()
         project_root = os.getcwd()
@@ -1943,7 +1943,7 @@ class LRACLI:
                 return
 
             print("⚠️ 任务尚未填充详情，无法认领\n")
-            print(f"📝 请先编辑任务文件补充以下内容:\n")
+            print("📝 请先编辑任务文件补充以下内容:\n")
             print(f"File: {task_file}\n")
 
             if "requirements" in missing:
@@ -2083,10 +2083,10 @@ class LRACLI:
                 print(f"name: {template.get('name')}")
                 print(f"description: {template.get('description', '')}")
                 print(f"states: {template.get('states', [])}")
-                print(f"transitions:")
+                print("transitions:")
                 for k, v in template.get("transitions", {}).items():
                     print(f"  {k} -> {v}")
-                print(f"\nstructure:")
+                print("\nstructure:")
                 print(template.get("structure", ""))
         else:
             output({"error": "not_found"}, json_mode)
@@ -2538,9 +2538,9 @@ class LRACLI:
 
         # 决策标识
         if decision == "full":
-            print(f"📊 决策：✅ 全量模式")
+            print("📊 决策：✅ 全量模式")
         else:
-            print(f"📊 决策：⚠️ 增量模式")
+            print("📊 决策：⚠️ 增量模式")
         print(f"📁 项目：{project_id}")
         print(f"📝 原因：{reason}\n")
 
@@ -2684,12 +2684,12 @@ class LRACLI:
                 print(f"   文档目录：{output_dir}/")
                 if create_tasks:
                     print(f"   创建任务：{len(result.get('created_tasks', []))}")
-                print(f"\n📁 文档已生成:")
-                print(f"   docs/MODULES.md                    # 项目总览")
-                print(f"   .long-run-agent/analysis/index.json # Agent 快速索引")
-                print(f"\n🤖 Agent 使用:")
-                print(f'   类查找: index["classes"]["类名"]')
-                print(f'   函数查找: index["functions"]["函数名"]')
+                print("\n📁 文档已生成:")
+                print("   docs/MODULES.md                    # 项目总览")
+                print("   .long-run-agent/analysis/index.json # Agent 快速索引")
+                print("\n🤖 Agent 使用:")
+                print('   类查找: index["classes"]["类名"]')
+                print('   函数查找: index["functions"]["函数名"]')
 
             output(result, json_mode)
 
@@ -2708,7 +2708,7 @@ class LRACLI:
             try:
                 import yaml
 
-                with open(config_path, "r", encoding="utf-8") as f:
+                with open(config_path, encoding="utf-8") as f:
                     config = yaml.safe_load(f)
                     if config and "project" in config:
                         project_name = config["project"].get("name", project_name)
@@ -2752,7 +2752,7 @@ class LRACLI:
 
         if show_content:
             try:
-                with open(index_path, "r", encoding="utf-8") as f:
+                with open(index_path, encoding="utf-8") as f:
                     content = json.load(f)
                 output(content, json_mode)
             except Exception as e:
@@ -2830,7 +2830,7 @@ class LRACLI:
             for name, info in templates.items():
                 print(f"\n📁 {name} - {info['description']}")
                 print(f"   状态：{' → '.join(info['states'])}")
-                print(f"   流转:")
+                print("   流转:")
                 for state, next_states in info["transitions"].items():
                     if next_states:
                         print(f"     {state} → {', '.join(next_states)}")
@@ -2849,25 +2849,24 @@ class LRACLI:
         check_name: Optional[str] = None,
     ):
         """LRA health diagnostics"""
-        from lra.doctor import (
-            run_diagnostics,
-            fix_orphaned_locks,
-            check_orphaned_locks,
-            check_installation,
-            check_task_list_valid,
-            check_locks_valid,
-            check_constitution_valid,
-            check_task_files,
-            check_orphaned_tasks,
-            check_circular_deps,
-            check_orphaned_locks,
-            check_stale_locks,
-            check_lock_file_valid,
-            check_config_valid,
-            check_version_tracking,
-            check_git_repo,
-        )
         from lra.config import CURRENT_VERSION
+        from lra.doctor import (
+            check_circular_deps,
+            check_config_valid,
+            check_constitution_valid,
+            check_git_repo,
+            check_installation,
+            check_lock_file_valid,
+            check_locks_valid,
+            check_orphaned_locks,
+            check_orphaned_tasks,
+            check_stale_locks,
+            check_task_files,
+            check_task_list_valid,
+            check_version_tracking,
+            fix_orphaned_locks,
+            run_diagnostics,
+        )
 
         path = "."
 
@@ -2927,7 +2926,7 @@ class LRACLI:
             if result.detail:
                 print(f"     └─ {result.detail}")
             if result.fix and not fix:
-                print(f"     └─ Run 'lra doctor --fix' to fix")
+                print("     └─ Run 'lra doctor --fix' to fix")
             return
 
         # Run all diagnostics
@@ -2943,11 +2942,11 @@ class LRACLI:
                 continue
 
             if category == "core":
-                print(f"  Core:")
+                print("  Core:")
             elif category == "locks":
-                print(f"\n  Locks:")
+                print("\n  Locks:")
             elif category == "tasks":
-                print(f"\n  Tasks:")
+                print("\n  Tasks:")
 
             for check in cat_checks:
                 if check.status == "ok":
@@ -2972,25 +2971,26 @@ class LRACLI:
         print(f"\n  {errors} errors, {warnings} warnings")
 
         if result.overall_ok:
-            print(f"\n✅ Overall: OK")
+            print("\n✅ Overall: OK")
         else:
-            print(f"\n❌ Overall: Issues found")
+            print("\n❌ Overall: Issues found")
 
         # Handle fix
         if fix and warnings > 0:
-            print(f"\n--- Fix Mode ---")
+            print("\n--- Fix Mode ---")
             orphaned = check_orphaned_locks(path)
             if orphaned.status == "warning":
                 if dry_run:
-                    print(f"  [dry-run] Would clean orphaned locks")
+                    print("  [dry-run] Would clean orphaned locks")
                 else:
-                    print(f"  Cleaning orphaned locks...")
+                    print("  Cleaning orphaned locks...")
                     fix_orphaned_locks(path)
-                    print(f"  ✅ Orphaned locks cleaned")
+                    print("  ✅ Orphaned locks cleaned")
 
     def cmd_recover(self, json_mode: bool = False):
         """从 tasks/目录恢复任务列表"""
         import os
+
         from lra.config import Config
 
         tasks_dir = Config.get_tasks_dir()
@@ -3005,19 +3005,19 @@ class LRACLI:
             return
 
         if success:
-            print(f"✅ 任务列表已恢复")
+            print("✅ 任务列表已恢复")
             print(f"   恢复数量：{result.get('recovered_count', 0)}")
             recovered = result.get("recovered_tasks", [])
             if recovered:
                 print(f"   任务列表：{', '.join(recovered)}")
         else:
             error = result.get("error", "unknown_error")
-            print(f"❌ 恢复失败")
+            print("❌ 恢复失败")
             print(f"   错误：{error}")
             if error == "no_task_files_found":
-                print(f"\n💡 提示：tasks/ 目录中没有任务文件")
+                print("\n💡 提示：tasks/ 目录中没有任务文件")
             elif error == "tasks_dir_not_found":
-                print(f"\n💡 提示：请确保项目已初始化")
+                print("\n💡 提示：请确保项目已初始化")
 
     # ==================== v5.0 新增命令 ====================
 
@@ -3107,7 +3107,7 @@ class LRACLI:
             return
 
         print(f"✅ 项目已初始化：{project_name}")
-        print(f"默认模板：task\n")
+        print("默认模板：task\n")
 
         # 自动分析项目
         print("📊 正在分析项目结构...")
@@ -3124,12 +3124,12 @@ class LRACLI:
 
         # 创建第一个任务
         if task_desc:
-            print(f"📋 创建第一个任务...")
+            print("📋 创建第一个任务...")
             self.cmd_create(task_desc)
         else:
             print("📋 下一步:")
-            print(f'   lra create "任务描述"      # 创建第一个任务')
-            print(f"   lra context                # 查看项目状态")
+            print('   lra create "任务描述"      # 创建第一个任务')
+            print("   lra context                # 查看项目状态")
 
         print()
 
@@ -3206,7 +3206,7 @@ class LRACLI:
             print()
             print("📋 推荐操作:")
             print(f"   lra claim {can_take[0]['id']}     # 领取最高优先级任务")
-            print(f"   lra context                # 查看详细上下文")
+            print("   lra context                # 查看详细上下文")
         else:
             print("💡 没有可领取的任务")
             print("   lra list                   # 查看所有任务")
@@ -3234,11 +3234,11 @@ class LRACLI:
     def cmd_relay(self, max_steps: int = 50, dry_run: bool = False, json_mode: bool = False):
         """Run automated relay — task execution loop."""
         import asyncio
-        from pathlib import Path
         from datetime import datetime
+        from pathlib import Path
 
-        from lra.relay import RelayOrchestrator, TaskQueue, ClaudeAdapter
         from lra.config import Config
+        from lra.relay import ClaudeAdapter, RelayOrchestrator, TaskQueue
 
         # Prepare run directory
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -3280,12 +3280,12 @@ class LRACLI:
             output(summary, json_mode)
             return
 
-        print(f"\n=== Relay Summary ===")
+        print("\n=== Relay Summary ===")
         print(f"Tasks processed: {summary['tasks_processed']}")
         print(f"Tasks succeeded: {summary['tasks_succeeded']}")
         print(f"Tasks failed: {summary['tasks_failed']}")
         if summary["errors"]:
-            print(f"\nErrors:")
+            print("\nErrors:")
             for err in summary["errors"]:
                 print(f"  - {err}")
 

@@ -5,7 +5,8 @@
 """
 
 import os
-from typing import Optional, IO
+from typing import Optional
+
 from filelock import FileLock
 
 

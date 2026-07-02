@@ -8,9 +8,9 @@ import json
 import os
 import subprocess
 from datetime import datetime
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
-from lra.config import Config, SafeJson, validate_project_initialized
+from lra.config import Config, SafeJson
 from lra.template_manager import TemplateManager
 
 
@@ -866,7 +866,7 @@ class TaskManager:
             try:
                 import json
 
-                with open(report_path, "r", encoding="utf-8") as f:
+                with open(report_path, encoding="utf-8") as f:
                     self.system_check_report = json.load(f)
                 return self.system_check_report
             except:
@@ -977,7 +977,7 @@ class TaskManager:
                 try:
                     package_json = os.path.join(os.getcwd(), "package.json")
                     if os.path.exists(package_json):
-                        with open(package_json, "r", encoding="utf-8") as f:
+                        with open(package_json, encoding="utf-8") as f:
                             pkg = json.load(f)
                             project_name = pkg.get("name", "unknown")
                 except:
@@ -989,7 +989,7 @@ class TaskManager:
                     pyproject_toml = os.path.join(os.getcwd(), "pyproject.toml")
                     if os.path.exists(pyproject_toml):
                         # 简单解析 TOML（避免依赖 toml 库）
-                        with open(pyproject_toml, "r", encoding="utf-8") as f:
+                        with open(pyproject_toml, encoding="utf-8") as f:
                             content = f.read()
                             # 查找 name = "xxx" 或 name = 'xxx'
                             import re
@@ -1027,7 +1027,7 @@ class TaskManager:
                 created_time = datetime.fromtimestamp(file_stat.st_ctime).isoformat()
                 modified_time = datetime.fromtimestamp(file_stat.st_mtime).isoformat()
 
-                with open(task_path, "r", encoding="utf-8") as f:
+                with open(task_path, encoding="utf-8") as f:
                     content = f.read()
 
                 description = self._extract_description_from_file(content)
@@ -1767,7 +1767,7 @@ class TaskManager:
 
         if os.path.exists(task_path):
             try:
-                with open(task_path, "r", encoding="utf-8") as f:
+                with open(task_path, encoding="utf-8") as f:
                     content = f.read()
 
                 # 提取 requirements

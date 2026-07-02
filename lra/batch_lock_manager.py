@@ -4,11 +4,12 @@
 v3.3 - 50ms 延迟保证 + 多 Agent 并发控制
 """
 
+import json
 import os
 import time
-import json
-from typing import Dict, Any, Optional, Tuple, List
-from lra.config import SafeJson, FileLock
+from typing import Any, Dict, List, Optional, Tuple
+
+from lra.config import FileLock, SafeJson
 
 BATCH_LOCK_TIMEOUT_MS = 30000  # 30 秒超时
 LOCK_HEARTBEAT_INTERVAL_MS = 10000  # 10 秒心跳
@@ -62,7 +63,7 @@ class BatchLockManager:
         agent_file = os.path.join(os.path.dirname(self.lock_path), ".batch_lock_agent")
         try:
             if os.path.exists(agent_file):
-                with open(agent_file, "r", encoding="utf-8") as f:
+                with open(agent_file, encoding="utf-8") as f:
                     return f.read().strip()
         except:
             pass
@@ -278,7 +279,7 @@ class BatchLockManager:
             return []
 
         logs = []
-        with open(self.log_path, "r", encoding="utf-8") as f:
+        with open(self.log_path, encoding="utf-8") as f:
             for line in f:
                 if line.strip():
                     logs.append(json.loads(line))

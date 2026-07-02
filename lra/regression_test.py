@@ -4,11 +4,9 @@
 v1.0 - 自动验证已完成任务
 """
 
-import os
-import json
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Any, Dict, Optional
 
 from lra.config import Config, SafeJson
 

@@ -74,7 +74,7 @@ class RelayOrchestrator:
             # timeout=0 == non-blocking, equivalent to LOCK_EX | LOCK_NB
             self._filelock.acquire(timeout=0)
             return True
-        except (Timeout, OSError, IOError):
+        except (Timeout, OSError):
             self._filelock = None
             return False
 
@@ -82,7 +82,7 @@ class RelayOrchestrator:
         if self._filelock is not None:
             try:
                 self._filelock.release()
-            except (IOError, OSError):
+            except OSError:
                 pass
             self._filelock = None
 

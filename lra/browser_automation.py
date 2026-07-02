@@ -5,10 +5,9 @@ v1.0 - 集成 Puppeteer/Playwright 验证
 """
 
 import os
-import json
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Any, Dict, List, Tuple
 
 from lra.config import Config
 
@@ -203,7 +202,7 @@ def test_{task_id}():
 
         for i, step in enumerate(test_steps, 1):
             script += f"            # 步骤 {i}: {step}\n"
-            script += f"            # TODO: 实现此步骤\n"
+            script += "            # TODO: 实现此步骤\n"
             script += f"            # take_screenshot('step{i}')\n\n"
 
         script += f"""            print("✅ 测试完成")

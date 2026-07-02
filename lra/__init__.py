@@ -5,11 +5,11 @@ LRA - AI Agent Task Manager with Quality Assurance v5.2.1
 __version__ = "5.2.1"
 __author__ = "LRA Contributors"
 
-from lra.config import Config, SafeJson, GitHelper, CURRENT_VERSION
+from lra.config import CURRENT_VERSION, Config, GitHelper, SafeJson
+from lra.locks_manager import LocksManager, LockStatus
+from lra.records_manager import RecordsManager
 from lra.task_manager import TaskManager
 from lra.template_manager import TemplateManager
-from lra.records_manager import RecordsManager
-from lra.locks_manager import LocksManager, LockStatus
 
 __all__ = [
     "__version__",

@@ -4,13 +4,14 @@
 v3.2 - Jinja2 模板引擎支持
 """
 
-import os
-import yaml
 import logging
+import os
 from datetime import datetime
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
-from lra.config import Config, SafeJson
+import yaml
+
+from lra.config import Config
 
 try:
     import jinja2
@@ -41,7 +42,7 @@ class TemplateManager:
                 self._save_template(path, builtin[name])
             else:
                 try:
-                    with open(path, "r", encoding="utf-8") as f:
+                    with open(path, encoding="utf-8") as f:
                         existing = yaml.safe_load(f)
                     existing_version = existing.get("version", "1.0") if existing else "1.0"
                     builtin_version = builtin[name].get("version", "1.0")
@@ -467,7 +468,7 @@ pytest tests/test_xxx.py -v
         if not os.path.exists(path):
             return None
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 return yaml.safe_load(f)
         except:
             return None
@@ -497,7 +498,7 @@ pytest tests/test_xxx.py -v
                 "version": "2.0",
                 "template_engine": "jinja2",
                 "keywords": [],
-                "structure": f"# {{{{ id }}}}\n\n## 描述\n\n{{{{ description }}}}\n\n## 交付物\n",
+                "structure": "# {{ id }}\n\n## 描述\n\n{{ description }}\n\n## 交付物\n",
                 "states": ["pending", "in_progress", "completed"],
                 "transitions": {
                     "pending": ["in_progress"],
@@ -642,7 +643,7 @@ pytest tests/test_xxx.py -v
             return self._get_default_stages()
 
         try:
-            with open(template_file, "r", encoding="utf-8") as f:
+            with open(template_file, encoding="utf-8") as f:
                 template_data = yaml.safe_load(f)
         except Exception as e:
             self.logger.error(f"加载模板失败: {e}")

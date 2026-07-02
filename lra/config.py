@@ -4,12 +4,13 @@ LRA v5.0 配置模块
 通用任务管理框架
 """
 
-import os
 import json
+import os
 import subprocess
 import time
-from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
+
 from filelock import FileLock as _FileLock
 
 CURRENT_VERSION = "5.2.1"
@@ -204,7 +205,7 @@ class SafeJson:
         if not os.path.exists(path):
             return None
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 return json.load(f)
         except:
             return None
