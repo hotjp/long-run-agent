@@ -2,11 +2,11 @@
 
 import asyncio
 import atexit
-import fcntl
-import os
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+
+from filelock import FileLock, Timeout
 
 from lra.config import Config
 from lra.relay.agent_runner import AgentRunner, TaskRunResult
@@ -57,31 +57,34 @@ class RelayOrchestrator:
         self._global_step = 0
         self._current_task_id: Optional[str] = None
         self._should_stop_flag = False
-        self._lock_fd: Optional[int] = None
+        self._filelock: Optional[FileLock] = None
 
         atexit.register(self._emergency_cleanup)
 
     def _acquire_file_lock(self, cwd: Path) -> bool:
-        """Acquire exclusive file lock to prevent concurrent relay instances."""
+        """Acquire exclusive file lock to prevent concurrent relay instances.
+
+        Uses the cross-platform `filelock` library (msvcrt on Windows,
+        fcntl under the hood on POSIX) so it works on all platforms.
+        """
         lock_path = Path(Config.get_metadata_dir()) / ".relay.lock"
         lock_path.parent.mkdir(parents=True, exist_ok=True)
-        self._lock_fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR)
+        self._filelock = FileLock(str(lock_path))
         try:
-            fcntl.flock(self._lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            # timeout=0 == non-blocking, equivalent to LOCK_EX | LOCK_NB
+            self._filelock.acquire(timeout=0)
             return True
-        except (IOError, OSError):
-            os.close(self._lock_fd)
-            self._lock_fd = None
+        except (Timeout, OSError, IOError):
+            self._filelock = None
             return False
 
     def _release_file_lock(self) -> None:
-        if self._lock_fd is not None:
+        if self._filelock is not None:
             try:
-                fcntl.flock(self._lock_fd, fcntl.LOCK_UN)
-                os.close(self._lock_fd)
+                self._filelock.release()
             except (IOError, OSError):
                 pass
-            self._lock_fd = None
+            self._filelock = None
 
     async def run(self) -> dict:
         """Run the relay orchestrator. Returns summary dict."""

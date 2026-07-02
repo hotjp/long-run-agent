@@ -2,6 +2,7 @@
 
 import json
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -76,9 +77,14 @@ class ClaudeAdapter:
         """Run Claude CLI, return structured output."""
         args = self._build_args(prompt)
 
+        # Resolve the claude binary — on Windows npm ships claude.cmd,
+        # and CreateProcess cannot run .cmd/.bat without a shell.
+        # shutil.which honors PATHEXT so it finds .cmd/.bat/.exe directly.
+        bin_path = shutil.which(self.bin) or self.bin
+
         # Spawn child process (Unix: new process group for easy kill)
         self._child = subprocess.Popen(
-            [self.bin, *args],
+            [bin_path, *args],
             cwd=str(cwd),
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
