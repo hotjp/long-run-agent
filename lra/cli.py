@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-LRA CLI v5.2.2
+LRA CLI v5.3.0
 AI Agent 任务管理 + 质量保障
 """
 
@@ -33,7 +33,7 @@ except:
 
 
 AGENT_GUIDE = """
-LRA v5.2.2 | AI Agent 任务管理 + 质量保障 + Constitution
+LRA v5.3.0 | AI Agent 任务管理 + 质量保障 + Constitution
 
 🚀 快速开始
    lra start                           # 智能启动（推荐）
@@ -760,6 +760,12 @@ class LRACLI:
                 # 根据状态显示下一步建议
                 if status == "pending":
                     print(f"{' ' * 14}→ lra claim {task_id}")
+                elif status in ("skipped", "cancelled"):
+                    lc = t.get("lifecycle") or {}
+                    reason = lc.get("reason", "")
+                    tag = "⏭️  skipped" if status == "skipped" else "❌ cancelled"
+                    suffix = f"（原因：{reason}）" if reason else ""
+                    print(f"{' ' * 14}{tag}{suffix} → lra recall {task_id}")
                 elif status == "in_progress":
                     # 检查心跳时间
                     lock = locks.get(task_id)
@@ -1926,8 +1932,7 @@ class LRACLI:
             # 使用相对于项目根目录的路径
             from lra.config import Config
 
-            metadata_dir = Config.get_metadata_dir()
-            task_file = f".{metadata_dir}/tasks/{task_id}.md"
+            task_file = os.path.join(Config.METADATA_DIR, "tasks", f"{task_id}.md")
 
             if json_mode:
                 output(
@@ -1945,6 +1950,8 @@ class LRACLI:
             print("⚠️ 任务尚未填充详情，无法认领\n")
             print("📝 请先编辑任务文件补充以下内容:\n")
             print(f"File: {task_file}\n")
+            print("ℹ️ 这些是【内容字段】，编辑它们完全允许（不违反任何规则）。")
+            print("   只有任务【状态】才必须用 `lra set` 改，禁止手编 task_list.json。\n")
 
             if "requirements" in missing:
                 print("## requirements")
@@ -1962,7 +1969,7 @@ class LRACLI:
                 print("- [交付物文件路径]")
                 print()
 
-            print("💡 提示: 填写完成后再次执行 lra claim 即可")
+            print(f"💡 提示: 填写完成后再次执行 lra claim {task_id} 即可")
             return
 
         success, result = self.locks_manager.claim(task_id)
@@ -1971,6 +1978,65 @@ class LRACLI:
     def cmd_publish(self, task_id: str, json_mode: bool = False):
         success, msg = self.locks_manager.publish_children(task_id)
         output({"ok": success, "message": msg}, json_mode)
+
+    def cmd_skip(self, task_id: str, reason: str = "", json_mode: bool = False):
+        """跳过任务：暂时不做，隐藏出 ready，可 lra recall 召回。"""
+        if not self._check_project():
+            output({"error": "not_initialized"}, json_mode)
+            return
+        success, msg = self.task_manager.skip_task(task_id, reason=reason)
+        if success:
+            try:
+                self.locks_manager.release(task_id)
+            except Exception:
+                pass
+            output(
+                {
+                    "ok": True,
+                    "task_id": task_id,
+                    "status": "skipped",
+                    "reason": reason,
+                    "hint": f"召回：lra recall {task_id}",
+                },
+                json_mode,
+            )
+        else:
+            output({"error": msg, "task_id": task_id}, json_mode)
+
+    def cmd_cancel(self, task_id: str, reason: str = "", json_mode: bool = False):
+        """取消任务：作废（创建错/无关），解锁下游，可 lra recall 召回。"""
+        if not self._check_project():
+            output({"error": "not_initialized"}, json_mode)
+            return
+        success, msg = self.task_manager.cancel_task(task_id, reason=reason)
+        if success:
+            try:
+                self.locks_manager.release(task_id)
+            except Exception:
+                pass
+            output(
+                {
+                    "ok": True,
+                    "task_id": task_id,
+                    "status": "cancelled",
+                    "reason": reason,
+                    "hint": "依赖此任务的任务已解锁；召回：lra recall " + task_id,
+                },
+                json_mode,
+            )
+        else:
+            output({"error": msg, "task_id": task_id}, json_mode)
+
+    def cmd_recall(self, task_id: str, json_mode: bool = False):
+        """召回：把 skipped/cancelled 任务恢复到初始状态。"""
+        if not self._check_project():
+            output({"error": "not_initialized"}, json_mode)
+            return
+        success, msg = self.task_manager.recall_task(task_id)
+        if success:
+            output({"ok": True, "task_id": task_id, "status": msg}, json_mode)
+        else:
+            output({"error": msg, "task_id": task_id}, json_mode)
 
     def cmd_pause(self, task_id: str, note: str = "", json_mode: bool = False):
         success, msg = self.locks_manager.pause(task_id, note=note)
@@ -3301,7 +3367,7 @@ def main():
             pass
 
     parser = argparse.ArgumentParser(
-        description="LRA v5.2.2 - AI Agent Task Manager with Quality Assurance",
+        description="LRA v5.3.0 - AI Agent Task Manager with Quality Assurance",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=AGENT_GUIDE,
     )
@@ -3461,6 +3527,18 @@ def main():
     set_p = subparsers.add_parser("set", help="Update status")
     set_p.add_argument("task_id")
     set_p.add_argument("status")
+
+    # skip / cancel / recall —— 横向生命周期退出（与正向状态机正交）
+    skip_p = subparsers.add_parser("skip", help="跳过任务（隐藏出 ready，可 recall 召回）")
+    skip_p.add_argument("task_id")
+    skip_p.add_argument("--reason", default="", help="跳过原因（记录到 lifecycle）")
+
+    cancel_p = subparsers.add_parser("cancel", help="取消任务（作废，解锁下游，可 recall 召回）")
+    cancel_p.add_argument("task_id")
+    cancel_p.add_argument("--reason", default="", help="取消原因（记录到 lifecycle）")
+
+    recall_p = subparsers.add_parser("recall", help="召回 skipped/cancelled 任务回到正常流程")
+    recall_p.add_argument("task_id")
 
     # split
     split_p = subparsers.add_parser(
@@ -3881,6 +3959,12 @@ Examples:
         cli.cmd_show(args.task_id, args.include_records, json_mode)
     elif args.command == "set":
         cli.cmd_set(args.task_id, args.status, json_mode)
+    elif args.command == "skip":
+        cli.cmd_skip(args.task_id, args.reason, json_mode)
+    elif args.command == "cancel":
+        cli.cmd_cancel(args.task_id, args.reason, json_mode)
+    elif args.command == "recall":
+        cli.cmd_recall(args.task_id, json_mode)
     elif args.command == "split":
         cli.cmd_split(args.task_id, args.count, args.plan, args.plan_file, args.auto, json_mode)
     elif args.command == "decompose":

@@ -491,6 +491,77 @@ class TaskManager:
                 return True, status
         return False, "not_found"
 
+    def skip_task(self, task_id: str, reason: str = "") -> Tuple[bool, str]:
+        """跳过任务：暂时不做，隐藏出 ready，但可 recall 召回。不解锁下游依赖。"""
+        data = self._load()
+        if not data:
+            return False, "not_initialized"
+        for t in data.get("tasks", []):
+            if t.get("id") == task_id:
+                current = t.get("status", "pending")
+                if current in ("skipped", "cancelled"):
+                    return False, f"already_lifecycle_state:{current}"
+                t["lifecycle"] = {
+                    "action": "skipped",
+                    "reason": reason,
+                    "at": datetime.now().isoformat(),
+                    "previous_status": current,
+                }
+                t["status"] = "skipped"
+                t["updated_at"] = datetime.now().isoformat()
+                self._save(data)
+                return True, "skipped"
+        return False, "not_found"
+
+    def cancel_task(self, task_id: str, reason: str = "") -> Tuple[bool, str]:
+        """取消任务：作废（创建错/与目标无关）。视为依赖已了结，解锁下游。仍可 recall 召回。"""
+        data = self._load()
+        if not data:
+            return False, "not_initialized"
+        for t in data.get("tasks", []):
+            if t.get("id") == task_id:
+                current = t.get("status", "pending")
+                if current in ("skipped", "cancelled"):
+                    return False, f"already_lifecycle_state:{current}"
+                t["lifecycle"] = {
+                    "action": "cancelled",
+                    "reason": reason,
+                    "at": datetime.now().isoformat(),
+                    "previous_status": current,
+                }
+                t["status"] = "cancelled"
+                t["updated_at"] = datetime.now().isoformat()
+                self._save(data)
+                # cancelled 视为依赖已了结 → 解锁依赖此任务的 blocked 任务
+                self._unblock_dependents(task_id)
+                return True, "cancelled"
+        return False, "not_found"
+
+    def recall_task(self, task_id: str) -> Tuple[bool, str]:
+        """召回：把 skipped/cancelled 任务恢复到初始状态，重新进入正常流程。"""
+        data = self._load()
+        if not data:
+            return False, "not_initialized"
+        for t in data.get("tasks", []):
+            if t.get("id") == task_id:
+                current = t.get("status", "pending")
+                if current not in ("skipped", "cancelled"):
+                    return False, f"not_lifecycle_state:{current}"
+                template = t.get("template", "task")
+                initial = self._get_initial_status(template)
+                t["lifecycle"] = {
+                    "action": "recalled",
+                    "reason": "",
+                    "at": datetime.now().isoformat(),
+                    "previous_status": current,
+                }
+                t["status"] = initial
+                t["updated_at"] = datetime.now().isoformat()
+                self._save(data)
+                # 依赖关系由 get_ready_tasks 动态重算，无需在此特殊处理
+                return True, initial
+        return False, "not_found"
+
     def _validate_constitution(
         self,
         task_id: str,
@@ -561,7 +632,8 @@ class TaskManager:
                     continue
 
                 status = dep_task.get("status", "pending")
-                if status in ["completed", "success", "finalized", "done"]:
+                # cancelled 视为依赖已了结（取消解锁下游）；skipped 不算
+                if status in ("completed", "success", "finalized", "done", "cancelled"):
                     completed.append(dep_id)
 
             if dependency_type == "all":
@@ -2032,14 +2104,19 @@ class TaskManager:
         if locks_manager:
             locks = locks_manager.get_all_locks()
 
-        completed_statuses = {"completed", "truly_completed", "force_completed"}
+        # done_statuses: 正向终态
+        # hidden_from_ready: 任务自身从 ready 隐藏（含横向生命周期退出 skipped/cancelled）
+        # dep_satisfied: 作为依赖时算"已满足"（cancelled 解锁下游；skipped 不解锁）
+        done_statuses = {"completed", "truly_completed", "force_completed"}
+        hidden_from_ready = done_statuses | {"skipped", "cancelled"}
+        dep_satisfied = done_statuses | {"cancelled"}
         ready_tasks = []
 
         for task in data.get("tasks", []):
             task_id = task.get("id", "")
 
-            # Skip completed tasks
-            if task.get("status") in completed_statuses:
+            # Skip completed / skipped / cancelled tasks
+            if task.get("status") in hidden_from_ready:
                 continue
 
             # Check if locked by others
@@ -2072,7 +2149,7 @@ class TaskManager:
                     continue
 
                 dep_status = dep_task.get("status", "pending")
-                if dep_status not in completed_statuses:
+                if dep_status not in dep_satisfied:
                     blocked_by.append(
                         {
                             "id": dep_id,
@@ -2090,7 +2167,8 @@ class TaskManager:
             parent_id = task.get("parent_id")
             if parent_id:
                 parent_task = self.get(parent_id)
-                if parent_task and parent_task.get("status") not in completed_statuses:
+                # 只有正向终态的 parent 才释放子任务；skipped/cancelled 的 parent 其子任务保持隐藏
+                if parent_task and parent_task.get("status") not in done_statuses:
                     continue
 
             # Apply priority filter
@@ -2175,7 +2253,8 @@ class TaskManager:
             return []
 
         blocked_tasks = []
-        completed_statuses = {"completed", "truly_completed", "force_completed"}
+        # cancelled 视为依赖已了结（与 get_ready_tasks 的 dep_satisfied 一致）
+        completed_statuses = {"completed", "truly_completed", "force_completed", "cancelled"}
 
         for task in data.get("tasks", []):
             task_id = task.get("id", "")

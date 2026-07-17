@@ -4,7 +4,7 @@
 
 1. **禁止跳过阶段** — 必须按顺序通过每个阶段，不能直接 set completed
 2. **禁止跳过证据** — 每阶段必须填充证据字段才能推进
-3. **禁止手动编辑 JSON** — 用 `lra set` 命令改状态
+3. **状态用 `lra set` 改，禁止手编 JSON** — 但 `tasks/<id>.md` 的**内容字段**（需求/验收/交付物/证据）可以、也应当由你编辑
 4. **禁止提交未验证代码** — 测试必须跑过才能 commit
 
 ---
@@ -132,6 +132,22 @@ git commit -m "feat(<stage>): <任务描述>
 
 🤖 Generated with LRA"
 ```
+
+---
+
+## 跳过 / 取消 / 召回
+
+并非所有任务都要走到 completed。遇到以下情况用**横向生命周期退出**（不经过正向状态机流转）：
+
+```bash
+lra skip <id> --reason "暂不做：等外部接口"      # 跳过，移出 ready，但可召回
+lra cancel <id> --reason "创建错误，与目标无关"    # 取消作废，解锁依赖它的任务
+lra recall <id>                                   # 把 skipped/cancelled 召回到 pending
+```
+
+- **skip**：暂时不做，`lra ready` 不再显示；依赖它的任务**继续等**（不解锁）。
+- **cancel**：作废，`lra ready` 不再显示；依赖它的任务**被解锁**（视为依赖已了结）。
+- 两者都可用 `lra recall` 恢复到正常流程；`lra list` 仍可见（带原因）。
 
 ---
 
