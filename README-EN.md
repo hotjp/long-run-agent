@@ -28,6 +28,7 @@ LRA is a command-line tool that helps manage long-running AI agent development t
 - 📊 **Code change tracking** - Per-feature records with Git integration
 - 📜 **Operation audit logs** - Complete traceability
 - 🔧 **Multi-language code checking** - Python, JavaScript, Go
+- ♻️ **Skip / cancel / recall** - Lateral lifecycle exits for tasks (v5.3.0)
 
 ## Installation
 

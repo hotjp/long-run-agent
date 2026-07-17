@@ -2,6 +2,37 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.3.0] - 2026-07-17
+
+### ♻️ 任务生命周期：跳过 / 取消 / 召回（新功能）
+
+此前任务状态机只有一个正向终态（completed→optimizing→truly_completed），无法表达"暂时不做"、"作废"这类横向退出。本版新增两种与正向状态机正交的生命周期状态及专用命令：
+
+- **`lra skip <id> [--reason]`**：跳过——暂时不做，移出 `lra ready`，但可召回。依赖它的任务**继续等待**（不解锁）。
+- **`lra cancel <id> [--reason]`**：取消——作废（创建错误/与目标无关），移出 `lra ready`，依赖它的任务**被解锁**（视为依赖已了结）。
+- **`lra recall <id>`**：召回——把 `skipped`/`cancelled` 任务恢复到初始状态，重新进入正常流程；依赖关系由 `ready` 动态重算。
+
+实现要点：
+
+- 把 `get_ready_tasks` / `_check_dependencies_satisfied` 原本混用的 `completed_statuses` 拆成三个语义集合：`done_statuses`（正向终态）、`hidden_from_ready`（+skipped/cancelled，自身移出 ready）、`dep_satisfied`（+cancelled，作依赖算满足）。"取消解锁下游、跳过不解锁"由此自然成立。
+- `cancelled` 因可召回而非硬终态，故 `cancel` 时**显式**调用 `_unblock_dependents` 触发解锁，而非依赖终态判定。
+- skip/cancel 写入 `lifecycle` 元数据（action/reason/at/previous_status），`lra list` 带原因展示，供审计。
+
+### 🐛 Agent 提示自相矛盾修复
+
+修复一套让工作 agent 产生困扰的指令矛盾（实测中 agent 为此消耗大量推理）：
+
+- **claim 死结**：`lra claim` 要求任务 `.md` 的需求/验收/交付物字段已填，但角色模板却写"❌ 不要编辑 task 文件"——而 `lra` 又没有填字段的命令，agent 无路可走。现把过宽规则改为"状态用 `lra set` 改；内容字段（需求/验收/交付物/证据）可以且应当编辑"，三处指令文档（agent_prompt / lra-full / lra-minimal）统一。
+- **claim 失败提示**：补充歧义消除说明（"这些是内容字段，编辑允许；只有状态才用 lra set"），并修复畸形的文件路径（`f".{metadata_dir}/..."` 拼出 `./Users/...`）→ 用 `os.path.join` 生成干净的相对路径。
+
+### ✅ 验证
+
+- 新增 `tests/test_skip_cancel.py`（12 个测试：ready 隐藏、cancel 解锁下游、skip 不解锁、recall 恢复与动态重阻塞、非法转换、lifecycle 元数据、CLI 端到端）。
+- 全量 **93 测试通过**（原 81 + 新 12）。
+- 端到端冒烟：skip/cancel/recall 经 CLI 验证；依赖阻塞经改动的 `get_ready_tasks` 回归确认正常。
+
+---
+
 ## [5.2.2] - 2026-07-02
 
 ### 🐛 Windows 兼容性（续 5.2.1）

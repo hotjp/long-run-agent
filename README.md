@@ -1,4 +1,4 @@
-# LRA - AI Agent Task Manager v5.2.2
+# LRA - AI Agent Task Manager v5.3.0
 
 **规范驱动 + 任务管理 + 质量保障系统 + 迭代阶段引导**
 
@@ -16,6 +16,7 @@
 - **🚀 Constitution机制** (v5.0.0): **规范驱动开发 + 质量门禁 + 不可协商原则**
 - **🌍 跨平台支持** (v5.0.0): **Windows / Linux / macOS 全平台兼容**
 - **🔄 Relay 全自动接力** (v5.1.0): **任务全自动执行 + 断点续跑 + 多任务串行**
+- **♻️ 任务跳过/取消/召回** (v5.3.0): **横向生命周期退出——skip 暂缓、cancel 作废（解锁下游）、recall 召回**
 
 ## 安装
 
@@ -57,6 +58,22 @@ lra orientation
 # 查看项目进度
 lra status
 ```
+
+## ♻️ 任务跳过 / 取消 / 召回 (v5.3.0)
+
+并非所有任务都要走到 `completed`。LRA 支持两种**横向生命周期退出**，与正向状态机（pending→in_progress→completed→…）正交：
+
+```bash
+lra skip <id> --reason "暂不做：等外部接口"      # 跳过：移出 ready，可召回（下游继续等）
+lra cancel <id> --reason "创建错误/与目标无关"    # 取消：作废，解锁依赖它的任务，可召回
+lra recall <id>                                  # 召回 skipped/cancelled 任务回到正常流程
+```
+
+- **skip**：暂时不做，`lra ready` 不再显示；依赖它的任务**继续等**（不解锁）。
+- **cancel**：作废，`lra ready` 不再显示；依赖它的任务**被解锁**（视为依赖已了结）。
+- 两者都能用 `lra recall` 恢复；`lra list` 仍可见（带原因，供审计）。
+
+---
 
 ## 🆕 Constitution功能 (v5.0)
 
