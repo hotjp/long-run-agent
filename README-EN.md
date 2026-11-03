@@ -30,6 +30,7 @@ LRA is a command-line tool that helps manage long-running AI agent development t
 - 🔧 **Multi-language code checking** - Python, JavaScript, Go
 - ♻️ **Skip / cancel / recall** - Lateral lifecycle exits for tasks (v5.3.0)
 - 🩹 **Self-healing tasks** - Collision-free task IDs, rollback on create failure; `lra doctor --fix` de-dupes and rebuilds missing task books (v5.3.1)
+- 🔄 **Task reset** - `lra reset` sends a task stranded by a killed worker back to pending — lock-guarded and audited, no more hand-editing task_list.json (v5.4.0)
 
 ## Installation
 

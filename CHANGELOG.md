@@ -2,6 +2,53 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.4.0] - 2026-11-03
+
+补齐 issue #2 剩下的问题3（缺少 `lra reset`），并给问题4（被取代的任务滞留）
+一个现成的答案。
+
+### 🆕 `lra reset`：把卡住的任务复位，等派重做
+
+worker 超时被 kill，任务卡在 `in_progress`——`lra set <id> pending` 会被状态机拒绝
+（in_progress → pending 不是合法流转），旧办法是手改 `task_list.json`，而 tasks 是 list
+结构、多 worker 并发写时会丢更新，对自动化调度器非常不友好。
+
+```bash
+lra reset <id> [--reason "worker 超时被 kill"] [--force] [--json]
+```
+
+- **绕过状态机**：这是唯一允许 `in_progress → pending` 的入口（`blocked` / `pending_test` 同样可复位）。
+- **锁保护**：心跳正常的 worker 持有锁时拒绝复位（确认对方已死再复位，或加 `--force`）；
+  孤儿锁（心跳过期，worker 已被 kill）不算活着——那正是要复位的那种锁。复位成功后
+  死 worker 留下的锁被一并清掉，否则新 worker `claim` 不到。
+- **审计记录**：写入任务的 `reset_history`（何时 / 从什么状态 / 复到哪 / 为什么 / 哪个 agent / 是否强制）。
+- **迭代上下文归零**：Ralph 的 `iteration` / `quality_checks` / `issues` 清零（新 worker 不继承
+  死掉的迭代计数），`optimization_history` 保留（那是审计痕迹，不是运行时状态）。
+- **拒绝复位**：`pending`（本来就不用复位）、`completed` / `truly_completed`（复位=抹掉工作成果）、
+  `skipped` / `cancelled`（用 `lra recall` 召回）。失败一律以非零退出码结束。
+- **输出契约**：stdout 末行固定为 `Reset: <id>`；`--json` 输出 `ok` / `task_id` / `status` /
+  `previous_status` / `reason` / `forced`。
+
+### 📌 问题4 的答案：被取代的任务用 `lra cancel`
+
+issue #2 问题4 建议加 `lra archive`。v5.3.0 的 `lra cancel` 已经覆盖这个场景：
+被合并取代的任务 `lra cancel <id> --reason "已被 task_XXX 取代"` 即从 `ready` 移除，
+同时**解锁依赖它的任务**（不再阻塞下游），且带原因可审计、需要时 `lra recall` 召回。
+因此不再新增 archive 命令——避免两套语义重叠的生命周期。
+
+### 🛠 顺带
+
+- `LocksManager.is_lock_active()`：判断锁是否被"还活着"的 worker 持有（心跳新鲜），
+  孤儿锁返回 False。
+
+### ✅ 验证
+
+- 新增 `tests/test_reset.py`：22 个用例（复位语义 / 拒绝复位的情况 / 审计记录 / 迭代归零 /
+  锁保护 / CLI 端到端）。
+- 全量 **151 测试通过**，ruff 无新增告警。
+
+---
+
 ## [5.3.1] - 2026-11-03
 
 修复 GitHub issue #2 报告的 4 个缺陷，并补上 agent 依赖的输出契约。自愈能力全部内置在

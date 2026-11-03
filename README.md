@@ -1,4 +1,4 @@
-# LRA - AI Agent Task Manager v5.3.1
+# LRA - AI Agent Task Manager v5.4.0
 
 **规范驱动 + 任务管理 + 质量保障系统 + 迭代阶段引导**
 
@@ -18,6 +18,7 @@
 - **🔄 Relay 全自动接力** (v5.1.0): **任务全自动执行 + 断点续跑 + 多任务串行**
 - **♻️ 任务跳过/取消/召回** (v5.3.0): **横向生命周期退出——skip 暂缓、cancel 作废（解锁下游）、recall 召回**
 - **🩹 任务自愈** (v5.3.1): **任务 ID 不再撞号、创建失败自动回滚；`lra doctor --fix` 内置去重 + 重建缺失的任务书**
+- **🔄 任务复位** (v5.4.0): **`lra reset` 把 worker 被 kill 后卡住的任务打回待办——带锁保护 + 审计记录，不再手改 task_list.json**
 
 ## 安装
 
@@ -73,6 +74,31 @@ lra recall <id>                                  # 召回 skipped/cancelled 任�
 - **skip**：暂时不做，`lra ready` 不再显示；依赖它的任务**继续等**（不解锁）。
 - **cancel**：作废，`lra ready` 不再显示；依赖它的任务**被解锁**（视为依赖已了结）。
 - 两者都能用 `lra recall` 恢复；`lra list` 仍可见（带原因，供审计）。
+
+> 被合并取代、目标已不存在的僵尸任务，用 `lra cancel <id> --reason "已被 task_XXX 取代"`
+> 即可——它会从 `ready` 移除并解锁下游，需要时还能 `lra recall` 回来。
+
+---
+
+## 🔄 任务复位 (v5.4.0)
+
+worker 超时被 kill，任务卡在 `in_progress`——`lra set <id> pending` 会被状态机拒绝
+（in_progress → pending 不是合法流转）。旧办法是手改 `task_list.json`，而 tasks 是 list
+结构、多 worker 并发写时会丢更新，对自动化调度器非常不友好。
+
+```bash
+lra reset <id> --reason "worker 超时被 kill"   # 复位到初始状态（pending），等派重做
+lra reset <id> --force                          # 即使心跳正常也强制复位
+lra reset <id> --json                           # 机器可读输出
+```
+
+- **绕过状态机**：唯一允许 `in_progress → pending` 的入口（`blocked` / `pending_test` 同样可复位）。
+- **锁保护**：心跳正常的 worker 持有锁时拒绝复位；孤儿锁（心跳过期=worker 已被 kill）不算活着。
+  复位成功后死 worker 的锁被一并清掉，否则新 worker `claim` 不到。
+- **审计记录**：写入任务的 `reset_history`（何时 / 从什么状态 / 复到哪 / 为什么 / 哪个 agent）。
+- **迭代归零**：Ralph 的 `iteration` 与质量检查清零——新 worker 不继承死掉的迭代计数。
+- **拒绝复位**：`pending`、`completed` / `truly_completed`（复位=抹掉工作成果）、
+  `skipped` / `cancelled`（用 `lra recall` 召回）。失败一律非零退出码。
 
 ---
 
@@ -230,6 +256,7 @@ lra relay
 | `lra create <desc> --template <name>` | 创建任务 |
 | `lra show <id>` | 任务详情（包含迭代进度和阶段引导） |
 | `lra set <id> <status>` | 更新状态（自动Constitution验证） |
+| `lra reset <id> [--reason] [--force]` | 🆕 复位卡住的任务（in_progress → pending，带锁保护+审计） |
 | `lra set <id> force_next_stage` | 🆕 强制进入下一迭代阶段（含阶段质量检查） |
 | `lra split <id> --auto` | 🆕 使用decompose建议自动拆分 |
 | `lra decompose <id>` | 🆕 分析任务并建议如何拆分 |
