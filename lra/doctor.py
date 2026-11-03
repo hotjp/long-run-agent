@@ -4,6 +4,7 @@ LRA Doctor - Health diagnostics for LRA projects
 v5.0 - Check installation, locks, tasks, constitution, and more
 """
 
+import importlib
 import os
 import re
 import shutil
@@ -32,6 +33,68 @@ class DoctorResult:
     checks: List[DoctorCheck] = field(default_factory=list)
     cli_version: str = ""
     timestamp: str = ""
+
+
+def check_runtime_dependencies(path: str) -> DoctorCheck:
+    """检查运行依赖是否可用（jinja2 / pyyaml / filelock）。
+
+    这几个包缺失或被同名文件遮蔽时，症状是"任务书渲染不出来""任务书模板损坏"，
+    但真正的原因是环境——所以单独查，别让用户去查模板。
+    """
+    required = [
+        ("jinja2", "渲染任务书模板（{{ }} / {% %} 语法）"),
+        ("yaml", "读写模板与 constitution"),
+        ("filelock", "文件锁（多 worker 并发写 task_list）"),
+    ]
+    missing = []
+    shadowed = []
+    for module_name, purpose in required:
+        try:
+            mod = importlib.import_module(module_name)
+        except ModuleNotFoundError as e:
+            # e.name 是"真正缺失"的那个模块名：
+            # - 等于 module_name → 这个依赖压根没装
+            # - 不等 → 中间某个模块被同名文件遮蔽了（典型：当前目录有个 inspect.py）
+            if e.name == module_name:
+                missing.append((module_name, purpose, str(e)))
+            else:
+                shadowed.append((module_name, purpose, f"缺 {e.name}：{e}"))
+            continue
+        except Exception as e:  # noqa: BLE001 - 任何导入失败都要报出来
+            shadowed.append((module_name, purpose, str(e)))
+            continue
+        # 能 import 成功，但加载的不是 site-packages 里的那份 → 被人为遮蔽
+        origin = getattr(mod, "__file__", "") or ""
+        if origin and "site-packages" not in origin and "dist-packages" not in origin:
+            shadowed.append((module_name, purpose, f"实际加载自 {origin}"))
+
+    if missing or shadowed:
+        parts = []
+        if missing:
+            parts.append(
+                "缺少依赖: "
+                + "、".join(f"{n}（{p}）" for n, p, _ in missing)
+            )
+        if shadowed:
+            parts.append(
+                "依赖被同名文件遮蔽: "
+                + "、".join(f"{n} → {msg}" for n, _, msg in shadowed)
+            )
+        return DoctorCheck(
+            name="runtime_dependencies",
+            status="error",
+            message="运行环境缺少依赖，任务书无法渲染",
+            detail="; ".join(parts),
+            fix="pip install -U long-run-agent   # 会带上 jinja2 / pyyaml / filelock",
+            category="environment",
+        )
+
+    return DoctorCheck(
+        name="runtime_dependencies",
+        status="ok",
+        message="运行依赖齐全（jinja2 / pyyaml / filelock）",
+        category="environment",
+    )
 
 
 def check_installation(path: str) -> DoctorCheck:
@@ -116,7 +179,17 @@ def check_locks_valid(path: str) -> DoctorCheck:
 
 def check_constitution_valid(path: str) -> DoctorCheck:
     """Check if constitution.yaml exists and is valid YAML"""
-    import yaml
+    try:
+        import yaml
+    except ImportError:
+        return DoctorCheck(
+            name="constitution",
+            status="error",
+            message="缺少 PyYAML 依赖，无法校验 constitution",
+            detail="pip install -U long-run-agent   # 会带上 pyyaml",
+            fix="pip install -U long-run-agent",
+            category="environment",
+        )
 
     const_path = os.path.join(path, Config.METADATA_DIR, "constitution.yaml")
     if not os.path.exists(const_path):
@@ -869,6 +942,7 @@ def run_diagnostics(path: str = ".") -> DoctorResult:
     )
 
     checks = [
+        check_runtime_dependencies(path),
         check_installation(path),
         check_task_list_valid(path),
         check_locks_valid(path),

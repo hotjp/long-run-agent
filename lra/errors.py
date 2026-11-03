@@ -75,6 +75,14 @@ ERROR_CATALOG = {
         "lra doctor --fix 会把冲突记录拆成独立 ID，任务书归实际持有它的那条",
         "category": "data_integrity",
     },
+    "jinja2_not_installed": {
+        "message": "缺少 Jinja2 依赖，无法渲染任务书（模板里的 Jinja2 占位符语法需要它）",
+        "action": "pip install -U long-run-agent   # 会带上 jinja2 / pyyaml / filelock",
+        "hint": "任务已回滚，未写入 task_list（不会产生无任务书的僵尸任务）。"
+        "若 pip 明明装了却仍报此错，多半是有同名文件遮蔽了 Python 标准库"
+        "（例如当前目录下有个 inspect.py）——`lra doctor` 的 runtime_dependencies 检查会指出这一点",
+        "category": "environment",
+    },
     "task_file_create_failed": {
         "message": "任务文件创建失败: {detail}",
         "action": "lra doctor  # 检查模板是否损坏",

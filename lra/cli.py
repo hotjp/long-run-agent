@@ -3079,6 +3079,7 @@ class LRACLI:
             check_locks_valid,
             check_orphaned_locks,
             check_orphaned_tasks,
+            check_runtime_dependencies,
             check_stale_locks,
             check_task_files,
             check_task_list_valid,
@@ -3120,6 +3121,7 @@ class LRACLI:
         # If running a specific check
         if check_name:
             check_map = {
+                "runtime_dependencies": check_runtime_dependencies,
                 "installation": check_installation,
                 "task_list": check_task_list_valid,
                 "locks": check_locks_valid,
@@ -3158,12 +3160,14 @@ class LRACLI:
         errors = 0
         warnings = 0
 
-        for category in ["core", "locks", "tasks"]:
+        for category in ["environment", "core", "locks", "tasks"]:
             cat_checks = [c for c in result.checks if c.category == category]
             if not cat_checks:
                 continue
 
-            if category == "core":
+            if category == "environment":
+                print("  Environment:")
+            elif category == "core":
                 print("  Core:")
             elif category == "locks":
                 print("\n  Locks:")

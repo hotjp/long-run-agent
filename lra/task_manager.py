@@ -366,8 +366,15 @@ class TaskManager:
             # 回滚：不留下"有元数据、无任务书"的僵尸任务
             data["tasks"].pop()
             self._save(data)
+            # 缺依赖和模板损坏是两回事：前者要装包，后者要修模板，
+            # 报同一个错会让用户查错方向
+            error_code = (
+                "jinja2_not_installed"
+                if detail == "jinja2_not_installed"
+                else "task_file_create_failed"
+            )
             return False, {
-                "error": "task_file_create_failed",
+                "error": error_code,
                 "detail": detail,
                 "task_id": task_id,
             }

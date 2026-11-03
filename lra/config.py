@@ -11,10 +11,16 @@ import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
-from filelock import FileLock as _FileLock
+try:
+    from filelock import FileLock as _FileLock
+except ImportError as _e:  # pragma: no cover - 只在依赖缺失时触发
+    raise ImportError(
+        "缺少 filelock 依赖，LRA 无法启动。请执行: pip install -U long-run-agent\n"
+        f"（原始错误: {_e}）"
+    ) from _e
 
-CURRENT_VERSION = "5.4.0"
-LRA_VERSION = "5.4.0"
+CURRENT_VERSION = "5.4.1"
+LRA_VERSION = "5.4.1"
 SCHEMA_VERSION = "2026-02-25"
 
 
