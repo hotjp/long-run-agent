@@ -2,6 +2,66 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.3.1] - 2026-11-03
+
+修复 GitHub issue #2 报告的 4 个缺陷，并补上 agent 依赖的输出契约。自愈能力全部内置在
+`lra doctor` / `lra doctor --fix` 里——**发现问题的命令和修复它的命令是同一条路径**，
+错误信息里给出的 `lra doctor --fix` 确实能修好。
+
+### 🐛 ID 分配：用最大序号 +1，而不是"任务数量 +1"
+
+删除历史任务后计数回退 → 新任务撞号 → `task_list.json` 出现重复 ID。重复 ID 使读取只能
+首命中旧记录，而创建任务书时又按 ID 覆盖同名 md，于是新旧两个任务的"任务书"互相串台。
+
+- `TaskManager._allocate_task_id`：取存量最大序号 +1，并把 `tasks/` 下已存在的 md 文件名
+  一并计入占位集合，杜绝覆盖历史任务书；子任务在父任务前缀下顺延。
+
+### 🐛 创建失败不回滚 → 僵尸任务
+
+模板损坏时（YAML 语法错被裸 `except` 伪装成"模板不存在"）任务仍写进 `task_list`，
+却没有 md → 产生"有元数据、无任务书"的僵尸任务（issue 现场：17 个）。
+
+- `_do_create`：任务书创建失败即回滚 `task_list`（不再产生僵尸任务）；save 失败同样回滚。
+- `TemplateManager.load_template_detailed`：区分 `template_not_found` /
+  `template_parse_error` / `template_empty`；渲染异常显式返回原因；写文件失败清理半截文件；
+  移除静默回退到 task 模板（曾写出与元数据 `template` 字段不一致的任务书）。
+
+### 🐛 重复 ID 静默命中
+
+`show`/`set` 直接取首条记录，worker 会拿到另一个任务的任务书，且无任何提示。
+
+- `TaskManager.find_duplicates` / `get_unique`：重复 ID 显式报错。
+- `lra doctor` 新增 `duplicate_task_ids` 检查；`lra doctor --fix` 内置去重——按**任务书正文
+  归属**把冲突记录拆成独立 ID（持有任务书的那条保留原 ID，其余解绑并分配新 ID），
+  修复前自动备份 `task_list.json`。
+
+### 🛠 doctor --fix：重建缺失的任务书
+
+issue #2 问题1 的遗留现场——记录在 `task_list` 里，但 `tasks/{id}.md` 从没落盘。
+
+- `doctor.check_task_files` 同时报两类问题：`task_file` 指向的文件不存在、记录里根本没有
+  `task_file`（撞号去重时被解绑的那条）。
+- `doctor.fix_missing_task_files` 用模板 + 描述重建任务书，**已有文件一律不覆盖**；
+  重建前给 `task_list` 留快照。
+- `task_manager` 创建任务时记录 `variables`（requirements/acceptance/design），
+  这样任务书丢失后能原样重建。
+- `doctor --fix` 接上这一步，并提示"重建的任务书只有描述，需求/验收/设计需人工补充"。
+
+### 📜 输出契约（脚本可消费）
+
+- `lra create/show/set` 支持子命令级 `--json`（默认 `SUPPRESS`，不覆盖全局 `--json`）。
+- `lra create` 成功时 stdout 末行固定为 `Created: <id>`，JSON 里 `id` 为顶层字段。
+- create/show/set 失败一律以**非零退出码**结束，错误信息自带可执行修复命令。
+- `lra start` 内部创建失败不中断引导流程。
+
+### ✅ 验证
+
+- 新增 `tests/test_issue2_integrity.py`：35 个回归用例覆盖上述全部行为
+  （ID 分配 / 回滚 / 重复 ID 检测 / 去重 / 重建任务书 / 输出契约）。
+- 全量 **129 测试通过**，ruff 无新增告警。
+
+---
+
 ## [5.3.0] - 2026-07-17
 
 ### ♻️ 任务生命周期：跳过 / 取消 / 召回（新功能）
