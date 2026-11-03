@@ -149,7 +149,12 @@ def check_constitution_valid(path: str) -> DoctorCheck:
 
 
 def check_task_files(path: str) -> DoctorCheck:
-    """Check if all referenced task .md files exist"""
+    """Check if all referenced task .md files exist
+
+    两类问题都算"任务书缺失"：
+    - task_file 指向的文件不存在（模板损坏时创建失败留下的僵尸任务）
+    - 记录里根本没有 task_file（撞号去重时被解绑的那条）
+    """
     task_list_path = os.path.join(path, Config.METADATA_DIR, Config.TASK_LIST_FILE)
     data = SafeJson.read(task_list_path)
     if not data:
@@ -161,21 +166,35 @@ def check_task_files(path: str) -> DoctorCheck:
         )
 
     missing = []
+    unbound = []
     tasks = data.get("tasks", [])
 
     for task in tasks:
         task_file = task.get("task_file", "")
-        if task_file:
-            task_path = os.path.join(path, Config.METADATA_DIR, task_file)
-            if not os.path.exists(task_path):
-                missing.append(task.get("id", "unknown"))
+        if not task_file:
+            unbound.append(task.get("id", "unknown"))
+            continue
+        task_path = os.path.join(path, Config.METADATA_DIR, task_file)
+        if not os.path.exists(task_path):
+            missing.append(task.get("id", "unknown"))
 
-    if missing:
+    broken = missing + unbound
+    if broken:
+        detail_parts = []
+        if missing:
+            detail_parts.append(
+                f"Missing: {', '.join(missing[:5])}" + ("..." if len(missing) > 5 else "")
+            )
+        if unbound:
+            detail_parts.append(
+                f"No task_file: {', '.join(unbound[:5])}" + ("..." if len(unbound) > 5 else "")
+            )
         return DoctorCheck(
             name="task_files",
             status="error",
-            message=f"{len(missing)} task file(s) missing",
-            detail=f"Missing: {', '.join(missing[:5])}" + ("..." if len(missing) > 5 else ""),
+            message=f"{len(broken)} task file(s) missing",
+            detail="; ".join(detail_parts),
+            fix="lra doctor --fix  # 用模板重建缺失的任务书",
             category="tasks",
         )
 
@@ -185,6 +204,97 @@ def check_task_files(path: str) -> DoctorCheck:
         message=f"All {len(tasks)} task files exist",
         category="tasks",
     )
+
+
+def fix_missing_task_files(path: str, dry_run: bool = False) -> Dict[str, Any]:
+    """重建缺失的任务书
+
+    只用 task_list 里已有的信息重建：template + description（+ variables）。
+    原始的 requirements / acceptance / design 如果创建时没被记录，
+    重建出来的任务书只有占位符，需要人工补 —— 这一点会写进返回值。
+
+    任务书路径由 Config 相对当前工作目录解析，所以整个过程在目标项目目录下执行。
+    """
+    task_list_path = os.path.join(path, Config.METADATA_DIR, Config.TASK_LIST_FILE)
+    data = SafeJson.read(task_list_path)
+    if not data:
+        return {"ok": False, "error": "task_list_unreadable", "rebuilt": [], "failed": []}
+
+    tasks = data.get("tasks", [])
+    if not isinstance(tasks, list):
+        return {"ok": False, "error": "task_list_malformed", "rebuilt": [], "failed": []}
+
+    from lra.template_manager import TemplateManager
+
+    rebuilt: List[Dict[str, str]] = []
+    failed: List[Dict[str, str]] = []
+    changed = False
+    now = datetime.now().isoformat()
+
+    origin_cwd = os.getcwd()
+    try:
+        os.chdir(path)
+        tm = TemplateManager()
+        for task in tasks:
+            tid = task.get("id")
+            if not tid:
+                continue
+            expected = task.get("task_file") or f"tasks/{tid}.md"
+            expected_abs = os.path.join(Config.get_metadata_dir(), expected)
+            if os.path.exists(expected_abs):
+                continue
+
+            template = task.get("template") or "task"
+            description = task.get("description") or ""
+            variables = task.get("variables") or None
+
+            if dry_run:
+                rebuilt.append({"id": tid, "template": template})
+                continue
+
+            ok, detail = tm.create_task_file(tid, template, description, variables)
+            if not ok:
+                failed.append({"id": tid, "error": str(detail)})
+                continue
+
+            # create_task_file 写到规范路径 tasks/{tid}.md；
+            # 记录里写的是别的路径时把它搬过去
+            canonical = os.path.join(Config.get_tasks_dir(), f"{tid}.md")
+            if os.path.abspath(canonical) != os.path.abspath(expected_abs):
+                os.makedirs(os.path.dirname(expected_abs), exist_ok=True)
+                shutil.move(canonical, expected_abs)
+
+            if task.get("task_file") != expected:
+                task["task_file"] = expected
+            task["updated_at"] = now
+            changed = True
+            rebuilt.append({"id": tid, "template": template})
+    finally:
+        os.chdir(origin_cwd)
+
+    if changed and not dry_run:
+        # 与去重修复保持一致：动手前先留一份快照
+        backup_dir = os.path.join(path, Config.METADATA_DIR, Config.BACKUP_DIR)
+        os.makedirs(backup_dir, exist_ok=True)
+        backup_path = os.path.join(
+            backup_dir, f"task_list.json.pre-rebuild.{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        )
+        try:
+            shutil.copy2(task_list_path, backup_path)
+        except OSError:
+            pass
+
+        if not SafeJson.write(task_list_path, data):
+            return {"ok": False, "error": "write_failed", "rebuilt": rebuilt, "failed": failed}
+
+    return {
+        "ok": True,
+        "rebuilt": rebuilt,
+        "failed": failed,
+        "count": len(rebuilt),
+        "dry_run": dry_run,
+    }
+
 
 
 def check_duplicate_task_ids(path: str) -> DoctorCheck:

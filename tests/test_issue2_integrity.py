@@ -415,5 +415,123 @@ class TestDoctorDedupeFix(TempProjectTestCase):
         self.assertEqual(len(ids), len(set(ids)))
 
 
+class TestMissingTaskFileRebuild(TempProjectTestCase):
+    """lra doctor --fix：用模板重建缺失的任务书（僵尸任务的解药）"""
+
+    def _records(self):
+        data = json.load(open(self.tm.task_list_path, encoding="utf-8"))
+        return data["tasks"]
+
+    def test_doctor_reports_missing_task_file(self):
+        from lra.doctor import check_task_files
+
+        self.tm.create("任务A")
+        os.unlink(self.md_path("task_001"))
+        result = check_task_files(".")
+        self.assertEqual(result.status, "error")
+        self.assertIn("task_001", result.detail)
+
+    def test_doctor_reports_task_without_task_file(self):
+        from lra.doctor import check_task_files
+
+        self.tm.create("任务A")
+        data = json.load(open(self.tm.task_list_path, encoding="utf-8"))
+        data["tasks"][0]["task_file"] = ""
+        with open(self.tm.task_list_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        result = check_task_files(".")
+        self.assertEqual(result.status, "error")
+        self.assertIn("No task_file", result.detail)
+
+    def test_fix_rebuilds_missing_task_file(self):
+        from lra.doctor import fix_missing_task_files
+
+        self.tm.create("任务A")
+        os.unlink(self.md_path("task_001"))
+
+        result = fix_missing_task_files(".")
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["count"], 1)
+        self.assertTrue(os.path.exists(self.md_path("task_001")))
+        with open(self.md_path("task_001"), encoding="utf-8") as f:
+            content = f.read()
+        self.assertIn("任务A", content)
+        self.assertIn("task_001", content)
+
+    def test_fix_rebuilds_unbound_task_file_and_relinks_record(self):
+        from lra.doctor import fix_missing_task_files
+
+        self.tm.create("任务A")
+        data = json.load(open(self.tm.task_list_path, encoding="utf-8"))
+        data["tasks"][0]["task_file"] = ""
+        with open(self.tm.task_list_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        os.unlink(self.md_path("task_001"))
+
+        result = fix_missing_task_files(".")
+        self.assertTrue(result["ok"])
+        self.assertTrue(os.path.exists(self.md_path("task_001")))
+        self.assertEqual(self._records()[0]["task_file"], "tasks/task_001.md")
+
+    def test_fix_leaves_existing_task_files_untouched(self):
+        from lra.doctor import fix_missing_task_files
+
+        self.tm.create("任务A")
+        with open(self.md_path("task_001"), "w", encoding="utf-8") as f:
+            f.write("手写内容，不要动我")
+
+        result = fix_missing_task_files(".")
+        self.assertEqual(result["count"], 0)
+        with open(self.md_path("task_001"), encoding="utf-8") as f:
+            self.assertEqual(f.read(), "手写内容，不要动我")
+
+    def test_fix_dry_run_does_not_write(self):
+        from lra.doctor import fix_missing_task_files
+
+        self.tm.create("任务A")
+        os.unlink(self.md_path("task_001"))
+        result = fix_missing_task_files(".", dry_run=True)
+        self.assertTrue(result["dry_run"])
+        self.assertEqual(result["count"], 1)
+        self.assertFalse(os.path.exists(self.md_path("task_001")))
+
+    def test_fix_reports_failure_when_template_is_broken(self):
+        from lra.doctor import fix_missing_task_files
+
+        self.tm.create("任务A")
+        os.unlink(self.md_path("task_001"))
+        # 破坏模板：渲染必然失败
+        with open(
+            os.path.join(Config.get_templates_dir(), "task.yaml"), "w", encoding="utf-8"
+        ) as f:
+            f.write("name: task\nstructure: \"{{ broken\n")
+
+        result = fix_missing_task_files(".")
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["count"], 0)
+        self.assertEqual(len(result["failed"]), 1)
+        self.assertEqual(result["failed"][0]["id"], "task_001")
+        self.assertFalse(os.path.exists(self.md_path("task_001")))
+
+    def test_variables_are_persisted_and_restored_on_rebuild(self):
+        """创建时的 requirements/design 会被记录下来，重建时原样还原"""
+        from lra.doctor import fix_missing_task_files
+
+        self.tm.create(
+            "任务A",
+            variables={"design": "设计要点XYZ", "requirements": "需求要点ABC"},
+        )
+        record = self._records()[0]
+        self.assertEqual(record["variables"]["design"], "设计要点XYZ")
+
+        os.unlink(self.md_path("task_001"))
+        result = fix_missing_task_files(".")
+        self.assertEqual(result["count"], 1)
+        with open(self.md_path("task_001"), encoding="utf-8") as f:
+            content = f.read()
+        self.assertIn("设计要点XYZ", content)
+        self.assertIn("需求要点ABC", content)
+
+
 if __name__ == "__main__":
     unittest.main()

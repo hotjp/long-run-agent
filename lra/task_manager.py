@@ -341,6 +341,10 @@ class TaskManager:
                 "optimization_history": [],
             },
         }
+        # 记录创建时用的变量（requirements/acceptance/design 等），
+        # 这样任务书丢失后还能原样重建（lra doctor --fix）
+        if variables:
+            task["variables"] = variables
 
         data["tasks"].append(task)
         if not self._save(data):

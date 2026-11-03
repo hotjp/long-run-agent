@@ -2996,6 +2996,7 @@ class LRACLI:
             check_task_list_valid,
             check_version_tracking,
             fix_duplicate_task_ids,
+            fix_missing_task_files,
             fix_orphaned_locks,
             run_diagnostics,
         )
@@ -3131,6 +3132,25 @@ class LRACLI:
                         print(f"  ✅ Renumbered {dedupe_result.get('count', 0)} record(s)")
                     else:
                         print(f"  ❌ 修复失败: {dedupe_result.get('error')}")
+
+            # 缺失的任务书：用模板重建（僵尸任务的解药）
+            task_files = check_task_files(path)
+            if task_files.status == "error":
+                if dry_run:
+                    print("  [dry-run] Would rebuild missing task files")
+                else:
+                    print("  Rebuilding missing task files...")
+                    rebuild_result = fix_missing_task_files(path)
+                    if rebuild_result.get("ok"):
+                        for item in rebuild_result.get("rebuilt", []):
+                            print(f"    ✅ {item['id']} (template: {item['template']})")
+                        for item in rebuild_result.get("failed", []):
+                            print(f"    ❌ {item['id']}: {item['error']}")
+                        print(f"  ✅ Rebuilt {rebuild_result.get('count', 0)} task file(s)")
+                        if rebuild_result.get("count"):
+                            print("  ⚠️  重建的任务书只有描述，需求/验收/设计需人工补充")
+                    else:
+                        print(f"  ❌ 修复失败: {rebuild_result.get('error')}")
 
             orphaned = check_orphaned_locks(path)
             if orphaned.status == "warning":
