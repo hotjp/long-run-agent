@@ -4,35 +4,72 @@ LRA Doctor - Health diagnostics for LRA projects
 v5.0 - Check installation, locks, tasks, constitution, and more
 """
 
-import importlib
 import os
 import re
 import shutil
-from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Dict, List
 
 from lra.config import CURRENT_VERSION, Config, SafeJson
+from lra.deps import (
+    externally_managed,
+    install_missing,
+    missing_install_hint,
+    pip_install_command,
+    probe_all,
+)
 from lra.locks_manager import LockStatus
 
 
-@dataclass
 class DoctorCheck:
-    name: str
-    status: str  # "ok", "warning", "error"
-    message: str
-    detail: str = ""
-    fix: str = ""
-    category: str = "core"
+    """单个检查项。
+
+    用普通类而非 dataclass：dataclasses 自己 import inspect，
+    而 inspect 正是最常被同名文件遮蔽的标准库模块——用 dataclass 会让
+    doctor 在"环境被遮蔽"这种它本该诊断的场景里自己先崩掉。
+    """
+
+    __slots__ = ("name", "status", "message", "detail", "fix", "category")
+
+    def __init__(
+        self,
+        name: str,
+        status: str,  # "ok", "warning", "error"
+        message: str,
+        detail: str = "",
+        fix: str = "",
+        category: str = "core",
+    ):
+        self.name = name
+        self.status = status
+        self.message = message
+        self.detail = detail
+        self.fix = fix
+        self.category = category
+
+    def __repr__(self) -> str:  # pragma: no cover - 调试用
+        return f"DoctorCheck({self.name}, {self.status})"
 
 
-@dataclass
 class DoctorResult:
-    path: str
-    overall_ok: bool = True
-    checks: List[DoctorCheck] = field(default_factory=list)
-    cli_version: str = ""
-    timestamp: str = ""
+    __slots__ = ("path", "overall_ok", "checks", "cli_version", "timestamp")
+
+    def __init__(
+        self,
+        path: str,
+        overall_ok: bool = True,
+        checks: List[DoctorCheck] = None,
+        cli_version: str = "",
+        timestamp: str = "",
+    ):
+        self.path = path
+        self.overall_ok = overall_ok
+        self.checks = checks if checks is not None else []
+        self.cli_version = cli_version
+        self.timestamp = timestamp
+
+    def __repr__(self) -> str:  # pragma: no cover - 调试用
+        return f"DoctorResult({self.path}, ok={self.overall_ok})"
 
 
 def check_runtime_dependencies(path: str) -> DoctorCheck:
@@ -40,52 +77,61 @@ def check_runtime_dependencies(path: str) -> DoctorCheck:
 
     这几个包缺失或被同名文件遮蔽时，症状是"任务书渲染不出来""任务书模板损坏"，
     但真正的原因是环境——所以单独查，别让用户去查模板。
-    """
-    required = [
-        ("jinja2", "渲染任务书模板（{{ }} / {% %} 语法）"),
-        ("yaml", "读写模板与 constitution"),
-        ("filelock", "文件锁（多 worker 并发写 task_list）"),
-    ]
-    missing = []
-    shadowed = []
-    for module_name, purpose in required:
-        try:
-            mod = importlib.import_module(module_name)
-        except ModuleNotFoundError as e:
-            # e.name 是"真正缺失"的那个模块名：
-            # - 等于 module_name → 这个依赖压根没装
-            # - 不等 → 中间某个模块被同名文件遮蔽了（典型：当前目录有个 inspect.py）
-            if e.name == module_name:
-                missing.append((module_name, purpose, str(e)))
-            else:
-                shadowed.append((module_name, purpose, f"缺 {e.name}：{e}"))
-            continue
-        except Exception as e:  # noqa: BLE001 - 任何导入失败都要报出来
-            shadowed.append((module_name, purpose, str(e)))
-            continue
-        # 能 import 成功，但加载的不是 site-packages 里的那份 → 被人为遮蔽
-        origin = getattr(mod, "__file__", "") or ""
-        if origin and "site-packages" not in origin and "dist-packages" not in origin:
-            shadowed.append((module_name, purpose, f"实际加载自 {origin}"))
 
-    if missing or shadowed:
+    判定逻辑与 lra create 共用 lra/deps.py，保证两边结论一致。
+    """
+    statuses = probe_all()
+
+    missing = [s for s in statuses if s.state == "missing"]
+    shadowed = [s for s in statuses if s.state == "shadowed"]
+    broken = [s for s in statuses if s.state == "broken"]
+
+    if missing or shadowed or broken:
         parts = []
         if missing:
             parts.append(
                 "缺少依赖: "
-                + "、".join(f"{n}（{p}）" for n, p, _ in missing)
+                + "、".join(f"{s.package}（{s.purpose}）" for s in missing)
             )
         if shadowed:
             parts.append(
                 "依赖被同名文件遮蔽: "
-                + "、".join(f"{n} → {msg}" for n, _, msg in shadowed)
+                + "、".join(f"{s.package} → {s.detail}" for s in shadowed)
             )
+        if broken:
+            parts.append(
+                "依赖导入失败: " + "、".join(f"{s.package} → {s.detail}" for s in broken)
+            )
+        if externally_managed():
+            parts.append(
+                "当前 Python 受 PEP 668 保护，普通 pip install 会被拒绝——"
+                "安装命令需带 --user --break-system-packages，或改用虚拟环境"
+            )
+
+        # 修复建议必须对症：装包只治"没装"，治不了"被遮蔽"
+        if shadowed and not missing:
+            fix = "把上面点名的文件改名或移出工作目录（装包无用）"
+        elif missing:
+            fix = missing_install_hint()
+        else:
+            # 装坏了 → 强制重装。命令同样要适配 PEP 668，
+            # 裸 `pip install --force-reinstall` 在 homebrew Python 上会被直接拒。
+            pkgs = [s.package for s in broken] or ["jinja2"]
+            fix = " ".join(pip_install_command(["--force-reinstall"] + pkgs))
+
+        if shadowed:
+            headline = "依赖被同名文件遮蔽，任务书无法渲染"
+        elif missing:
+            headline = "运行环境缺少依赖，任务书无法渲染"
+        else:
+            headline = "依赖导入失败，任务书无法渲染"
+
         return DoctorCheck(
             name="runtime_dependencies",
             status="error",
-            message="运行环境缺少依赖，任务书无法渲染",
+            message=headline,
             detail="; ".join(parts),
-            fix="pip install -U long-run-agent   # 会带上 jinja2 / pyyaml / filelock",
+            fix=fix,
             category="environment",
         )
 
@@ -95,6 +141,16 @@ def check_runtime_dependencies(path: str) -> DoctorCheck:
         message="运行依赖齐全（jinja2 / pyyaml / filelock）",
         category="environment",
     )
+
+
+def fix_missing_dependencies(dry_run: bool = False) -> Dict[str, Any]:
+    """装上缺失的运行依赖（doctor --fix 的自愈动作）。
+
+    只装真的没装的（state == missing）。被同名文件遮蔽的装包没用——
+    得先把那个顶替标准库的文件挪走，doctor 的 detail 里会指出是哪个文件。
+    """
+    result = install_missing(dry_run=dry_run)
+    return result
 
 
 def check_installation(path: str) -> DoctorCheck:

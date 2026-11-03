@@ -31,33 +31,89 @@ LRA is a command-line tool that helps manage long-running AI agent development t
 - ♻️ **Skip / cancel / recall** - Lateral lifecycle exits for tasks (v5.3.0)
 - 🩹 **Self-healing tasks** - Collision-free task IDs, rollback on create failure; `lra doctor --fix` de-dupes and rebuilds missing task books (v5.3.1)
 - 🔄 **Task reset** - `lra reset` sends a task stranded by a killed worker back to pending — lock-guarded and audited, no more hand-editing task_list.json (v5.4.0)
+- 🔧 **Dependency self-healing** - `lra doctor` checks jinja2/pyyaml/filelock and tells apart "not installed / shadowed by a same-named file / broken install"; `doctor --fix` installs what's missing, and the commands it prints actually run under PEP 668 (v5.5.0)
 
 ## Installation
 
 ```bash
-git clone https://github.com/your-username/long-run-agent.git
-cd long-run-agent
-./lra version
+# Install from PyPI (all runtime dependencies included)
+pip install long-run-agent
+
+# Development environment
+pip install long-run-agent[dev]
+
+# Full install (adds browser test support)
+pip install long-run-agent[full]
 ```
+
+> The PyPI package is named `long-run-agent`; the CLI command is `lra`.
+
+### Runtime dependencies
+
+LRA has three hard dependencies — `pip install long-run-agent` pulls them in automatically:
+
+| Dependency | Purpose | Symptom when missing |
+|------------|---------|----------------------|
+| `jinja2>=3.0` | Renders task-book templates | `lra create` fails and rolls the task back |
+| `pyyaml>=6.0` | Reads/writes templates and constitution | `lra init` / template I/O fails |
+| `filelock>=3.9.0` | File locking (concurrent writes to task_list) | Locking fails, concurrent writes break |
+
+### Environment check: `lra doctor`
+
+```bash
+lra doctor --check runtime_dependencies   # inspect dependencies only
+lra doctor --fix                          # install whatever is missing
+```
+
+`doctor` also catches the subtler case: a dependency that *is* installed but shadowed by a same-named file in your working directory (e.g. a stray `inspect.py`). Installing again does not help there — `doctor` names the offending file.
+
+### Install blocked? PEP 668 (externally-managed)
+
+Homebrew and system Pythons refuse `pip install` outright:
+
+```
+error: externally-managed-environment
+```
+
+Two ways out:
+
+```bash
+# Option A: install into the user directory (recommended)
+python3 -m pip install --user --break-system-packages long-run-agent
+
+# Option B: use a virtualenv (cleanest)
+python3 -m venv .venv && source .venv/bin/activate
+pip install long-run-agent
+```
+
+> ⚠️ **Use `python3 -m pip`, not bare `pip`.** With several Pythons on `PATH`, bare `pip` frequently installs into a *different* interpreter than the one running `lra` — the dependency still looks missing afterwards.
+>
+> The commands printed by `lra doctor` and by LRA's error messages already account for PEP 668; just copy them.
 
 ## Quick Start
 
 ```bash
-# Initialize in your project
+# Initialize a project (creates the Constitution automatically)
 cd /path/to/your/project
-lra project create my-project
+lra init --name "My Project"
 
-# Create a feature
-lra feature create "User Login" --category backend --priority P0
+# Create + claim a task (recommended)
+lra new "Implement login"
 
-# Manage status
-lra feature status feature_001 --set in_progress
+# Or create a complex task and auto-split it
+lra new "Implement the auth module" --auto-split
 
-# Check code
-lra code check src/ --verbose
+# Inspect the Constitution
+lra constitution show
 
-# View statistics
-lra stats
+# Give an agent its context
+lra orientation
+
+# See what's ready to work on
+lra ready
+
+# Health check (also detects missing/shadowed dependencies)
+lra doctor
 ```
 
 ## Documentation

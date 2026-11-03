@@ -6,9 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from filelock import FileLock, Timeout
-
-from lra.config import Config
+from lra.config import Config, _import_filelock
 from lra.relay.agent_runner import AgentRunner, TaskRunResult
 from lra.relay.backoff import ExponentialBackoff
 from lra.relay.git_utils import GitError, GitUtils
@@ -57,7 +55,7 @@ class RelayOrchestrator:
         self._global_step = 0
         self._current_task_id: Optional[str] = None
         self._should_stop_flag = False
-        self._filelock: Optional[FileLock] = None
+        self._filelock: Optional[object] = None
 
         atexit.register(self._emergency_cleanup)
 
@@ -69,12 +67,14 @@ class RelayOrchestrator:
         """
         lock_path = Path(Config.get_metadata_dir()) / ".relay.lock"
         lock_path.parent.mkdir(parents=True, exist_ok=True)
-        self._filelock = FileLock(str(lock_path))
+        # 惰性导入 filelock：缺依赖时也要能启动到 doctor 去诊断环境
+        filelock_mod = _import_filelock()
+        self._filelock = filelock_mod(str(lock_path))
         try:
             # timeout=0 == non-blocking, equivalent to LOCK_EX | LOCK_NB
             self._filelock.acquire(timeout=0)
             return True
-        except (Timeout, OSError):
+        except Exception:  # noqa: BLE001 - filelock.Timeout 与 OSError 都在内
             self._filelock = None
             return False
 

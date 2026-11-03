@@ -367,15 +367,16 @@ class TaskManager:
             data["tasks"].pop()
             self._save(data)
             # 缺依赖和模板损坏是两回事：前者要装包，后者要修模板，
-            # 报同一个错会让用户查错方向
-            error_code = (
-                "jinja2_not_installed"
-                if detail == "jinja2_not_installed"
-                else "task_file_create_failed"
-            )
+            # 报同一个错会让用户查错方向。
+            # detail 形如 "jinja2_not_installed:No module named 'jinja2'"——
+            # 冒号前是错误码，冒号后是原始错误（透传，不被回滚话术掩盖）。
+            error_code, _, raw_detail = detail.partition(":")
+            if error_code not in ("jinja2_not_installed", "jinja2_import_failed"):
+                error_code = "task_file_create_failed"
+                raw_detail = detail
             return False, {
                 "error": error_code,
-                "detail": detail,
+                "detail": raw_detail or detail,
                 "task_id": task_id,
             }
 

@@ -7,7 +7,7 @@
 import os
 from typing import Optional
 
-from filelock import FileLock
+from lra.config import _import_filelock
 
 
 class RWLock:
@@ -20,7 +20,8 @@ class RWLock:
 
     def __init__(self, lock_path: str):
         self.lock_path = lock_path + ".rwlock"
-        self._filelock = FileLock(self.lock_path)
+        # 惰性导入：缺 filelock 时 LRA 仍要能启动到 doctor 去诊断环境
+        self._filelock = _import_filelock()(self.lock_path)
         self.mode: Optional[str] = None
 
     def _ensure_lock_file(self):

@@ -2,6 +2,69 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.5.0] - 2026-11-03
+
+回应 issue #4：环境缺依赖时，`lra create` 静默回滚，报错被"任务已回滚"的话术盖住，
+用户既不知道缺什么、也不知道该敲哪条命令——而 LRA 给出的那条命令
+（`pip install -U long-run-agent` / `lra doctor`）在真实环境里**根本跑不通**。
+
+### 🔍 依赖自检：`lra doctor --check runtime_dependencies`
+
+- **新增 `lra/deps.py`**：jinja2 / pyyaml / filelock 的探测与修复集中在一处，
+  `lra create` 和 `lra doctor` 给出**同一个结论、同一个修复动作**。
+- **区分三种坏法**（修法完全不同，不能笼统说"缺依赖"）：
+  | 坏法 | 症状 | 正确修法 |
+  |------|------|----------|
+  | missing | 真没装 | 装上 |
+  | shadowed | 装了，但被同名文件顶替（当前目录有 `inspect.py`） | **把那个文件挪走**（装包无用） |
+  | broken | 装了但 import 报错 | 强制重装 |
+- **`lra doctor --fix` 真的会装**：新增 `fix_missing_dependencies`，
+  作为修复流程的**第一步**（任务书重建本身就需要 jinja2，顺序不能反）。
+- **doctor 在坏环境里自己也活得下来**：`doctor.py` / `deps.py` 改用 `__slots__` 普通类
+  而非 dataclass——dataclasses 自己 `import inspect`，而 inspect 恰恰是最常被同名文件
+  遮蔽的那个标准库模块，用 dataclass 会让 doctor 在它本该诊断的环境里先死掉。
+
+### 💊 修复命令必须真的能修好
+
+- **PEP 668 适配**：homebrew / 系统 Python 上 `pip install` 会被直接拒绝。
+  现在所有安装命令都走 `sys.executable -m pip`，并按环境自动补
+  `--user --break-system-packages`：
+  ```
+  /opt/homebrew/opt/python@3.12/bin/python3.12 -m pip install --user --break-system-packages jinja2
+  ```
+  用 `sys.executable` 而不是裸 `pip`：PATH 上有多个 Python 时，裸 pip 经常装到
+  **另一个解释器**里——装完 `lra` 还是报缺依赖。
+- **遮蔽时不再把人引去装包**：被同名文件顶替时，修复动作直接说
+  "把上面点名的文件改名或移出工作目录（装包无用）"，并点名是哪个文件。
+- **`lra init` 不再因依赖问题崩掉**：constitution 用了 dataclasses，环境里有个
+  `inspect.py` 就会崩。以前是裸 traceback，现在给出可执行的修复指引。
+
+### 🔍 原始错误透传（issue 建议 2）
+
+- `lra create` 失败时不再只说"任务已回滚"——原始异常（`ModuleNotFoundError: No module
+  named 'bpy' —— 被 /path/inspect.py 遮蔽了标准库 inspect`）一并透传。
+- 新增错误码 `jinja2_import_failed`，与 `jinja2_not_installed` 区分：
+  前者是"装了但导入失败"，后者是"压根没装"。
+- **错误文案格式化不再有裸占位符**：`_safe_format` 兜底，缺字段时
+  渲染成「（未提供 xxx）」而不是 `{xxx}`——报错路径本身再抛异常等于把问题藏得更深。
+
+### 📚 文档补依赖声明（issue 建议 3）
+
+- `README.md` / `README-EN.md` 补**运行时依赖表**（依赖 / 用途 / 缺失时的症状）、
+  `lra doctor` 用法、**PEP 668 排查指引**（含"用 `python3 -m pip` 而不是裸 pip"的坑）。
+- 顺手修了 `README-EN.md` 的陈旧内容：安装章节还停在 `git clone`，
+  Quick Start 用的还是 v4 时代已经不存在的 `lra project create` / `lra feature create`。
+
+### ✅ 验证
+
+- 新增 `tests/test_deps.py`：**24 个用例**——PEP 668 命令生成、虚拟环境判定、
+  shadowed/broken/missing 三态探测、`fix_hint_for` 的动作分诊、pip 失败上报、
+  错误文案无裸占位符、**遮蔽环境下 `lra create` / `lra doctor` 的端到端行为**。
+- 扩展 `tests/test_doctor_dependencies.py`（6 → 6，语义随新文案更新）。
+- 全量 **180 测试通过**，ruff **120** 条（低于此前 121 的基线，无新增）。
+
+---
+
 ## [5.4.1] - 2026-11-03
 
 修一个"报错文案指向错误方向"的问题：运行环境缺依赖（或依赖被同名文件遮蔽）时，

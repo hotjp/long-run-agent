@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import yaml
 
 from lra.config import Config
+from lra.deps import probe_dependency
 
 try:
     import jinja2
@@ -594,7 +595,11 @@ pytest tests/test_xxx.py -v
 
         if engine == "jinja2":
             if not JINJA2_AVAILABLE:
-                return False, "jinja2_not_installed"
+                # 缺依赖 vs 被同名文件遮蔽 vs 装坏了——三种原因修法完全不同，
+                # 笼统报"缺 jinja2"会把用户引到错误的排查方向。
+                # 原始异常一并透传（issue #4 建议 2）。
+                status = probe_dependency("jinja2", "jinja2", "渲染任务书模板（Jinja2 语法）")
+                return False, f"{status.error_code}:{status.detail}"
             try:
                 structure = self._render_jinja2(structure, task_id, title, variables)
             except Exception as e:

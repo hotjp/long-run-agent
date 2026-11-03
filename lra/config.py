@@ -11,16 +11,35 @@ import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
-try:
-    from filelock import FileLock as _FileLock
-except ImportError as _e:  # pragma: no cover - 只在依赖缺失时触发
-    raise ImportError(
-        "缺少 filelock 依赖，LRA 无法启动。请执行: pip install -U long-run-agent\n"
-        f"（原始错误: {_e}）"
-    ) from _e
 
-CURRENT_VERSION = "5.4.1"
-LRA_VERSION = "5.4.1"
+def _import_filelock():
+    """惰性导入 filelock。
+
+    不能在模块顶层 import：缺依赖（或依赖被同名文件遮蔽）时，
+    LRA 会连启动都做不到 —— 而 `lra doctor` 恰恰是那个该被用户跑来
+    诊断"环境坏了"的命令。顶层 import 会让 doctor 自己先死掉。
+
+    所以：延迟到真正需要加锁时才导入，出错时给出能修好的提示。
+    """
+    try:
+        from filelock import FileLock
+
+        return FileLock
+    except ImportError as e:  # pragma: no cover - 只在依赖缺失时触发
+        # 给出真能跑通的命令：PEP 668 环境要带 --user --break-system-packages，
+        # 且必须装到跑 lra 的那个解释器里（PATH 上多个 Python 时裸 pip 会装错）
+        from lra.deps import pip_install_command
+
+        cmd = " ".join(pip_install_command(["long-run-agent"]))
+        raise ImportError(
+            f"缺少 filelock 依赖，无法加锁。请执行:\n  {cmd}\n"
+            f"（原始错误: {e}）\n"
+            f"若 pip 明明装了却仍报此错，多半是有同名文件遮蔽了 Python 标准库"
+            f"（例如当前目录下有个 inspect.py）——`lra doctor --check runtime_dependencies` 会指出这一点"
+        ) from e
+
+CURRENT_VERSION = "5.5.0"
+LRA_VERSION = "5.5.0"
 SCHEMA_VERSION = "2026-02-25"
 
 
@@ -192,7 +211,8 @@ class FileLock:
 
     def __enter__(self):
         os.makedirs(os.path.dirname(self._lock_path) or ".", exist_ok=True)
-        self._filelock = _FileLock(self._lock_path)
+        file_lock_cls = _import_filelock()
+        self._filelock = file_lock_cls(self._lock_path)
         self._filelock.acquire()
         return self
 

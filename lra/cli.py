@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 from lra.batch_lock_manager import BatchLockManager
 from lra.cli_extensions import CLIExtensions
 from lra.config import CURRENT_VERSION, Config, get_agent_id, validate_project_initialized
+from lra.deps import fix_hint_for, missing_install_hint
 from lra.errors import format_error_display, get_error_with_action
 from lra.locks_manager import LocksManager
 from lra.parsers import parse_dependencies, parse_variables
@@ -268,12 +269,21 @@ class LRACLI:
             print('   lra create "任务描述"      # 创建第一个任务')
 
             # 🆕 自动创建Constitution
-            from lra.constitution import init_constitution
-            from lra.guide import NextStepGuide
+            # 依赖坏了也要让 init 走完：constitution 用了 dataclasses，
+            # 而 dataclasses 会 import inspect —— 环境里有个同名 inspect.py
+            # 就会把它顶掉。这里不能崩，崩了用户连项目都初始化不了，
+            # 更无从知道环境出了问题。
+            try:
+                from lra.constitution import init_constitution
+                from lra.guide import NextStepGuide
 
-            success, msg = init_constitution(name)
-            if success:
-                print(f"\n{NextStepGuide.after_init(name)}")
+                success, msg = init_constitution(name)
+                if success:
+                    print(f"\n{NextStepGuide.after_init(name)}")
+                else:
+                    self._warn_dependency_broken(msg)
+            except Exception as e:  # noqa: BLE001
+                self._warn_dependency_broken(f"{type(e).__name__}: {e}")
 
             # 🆕 复制AGENTS.md到项目根目录
             if not skip_agents:
@@ -281,6 +291,34 @@ class LRACLI:
         else:
             # Quiet mode - minimal output
             print(f"Initialized: {name}")
+
+    def _warn_dependency_broken(self, detail: str) -> None:
+        """依赖坏了导致某一步没做成时，给出**能真的修好**的指引。
+
+        不能只丢一句"初始化失败"——用户会以为是 LRA 的 bug。
+        这里直接说清是哪一类问题、该做什么。
+        """
+        try:
+            from lra.deps import missing_install_hint, probe_all
+
+            bad = [s for s in probe_all() if not s.ok]
+        except Exception:  # noqa: BLE001 - 探测本身失败也别再炸一次
+            bad = []
+
+        shadowed = [s for s in bad if s.state == "shadowed"]
+        missing = [s for s in bad if s.state == "missing"]
+
+        print("\n⚠️  部分初始化步骤未完成（依赖问题）")
+        if shadowed:
+            for s in shadowed:
+                print(f"   · {s.package} 被同名文件遮蔽了标准库：{s.origin}")
+            print("   修复：把上面点名的文件改名或移出工作目录（装包无用），然后重跑 lra init")
+        elif missing:
+            print(f"   · 缺少依赖：{', '.join(s.package for s in missing)}")
+            print(f"   修复：{missing_install_hint()}")
+        else:
+            print(f"   原始错误：{detail}")
+            print("   修复：lra doctor --check runtime_dependencies（会指出到底坏在哪）")
 
     def _copy_agents_template(self, profile: str = "full"):
         """
@@ -1031,10 +1069,15 @@ class LRACLI:
                 print("   请检查依赖关系，避免循环")
                 sys.exit(1)
 
+            detail = result.get("detail", "")
             err_ctx = {
                 "task_id": result.get("task_id", ""),
-                "detail": result.get("detail", ""),
+                "detail": detail,
                 "count": result.get("count", ""),
+                # 依赖类错误的修复动作必须真能跑通：PEP 668 环境要带
+                # --user --break-system-packages，且要装到跑 lra 的那个解释器里；
+                # 被同名文件遮蔽的则要挪文件——装包根本没用。
+                "install_cmd": fix_hint_for("jinja2"),
             }
             err = get_error_with_action(error_code, err_ctx)
             if json_mode:
@@ -3085,6 +3128,7 @@ class LRACLI:
             check_task_list_valid,
             check_version_tracking,
             fix_duplicate_task_ids,
+            fix_missing_dependencies,
             fix_missing_task_files,
             fix_orphaned_locks,
             run_diagnostics,
@@ -3149,8 +3193,14 @@ class LRACLI:
             print(f"  {status_icon} {result.name}: {result.message}")
             if result.detail:
                 print(f"     └─ {result.detail}")
-            if result.fix and not fix:
-                print("     └─ Run 'lra doctor --fix' to fix")
+            if result.fix:
+                # 装包能修的才让用户去 --fix；被同名文件遮蔽的装包没用，
+                # 直接给出要挪走的文件——照着"跑 --fix"提示做会白忙一场
+                if "遮蔽" in result.detail:
+                    print(f"     └─ {result.fix}")
+                    print("     └─ 装包解决不了遮蔽问题：把上面点名的文件改名或移出工作目录")
+                elif not fix:
+                    print("     └─ Run 'lra doctor --fix' to fix")
             return
 
         # Run all diagnostics
@@ -3204,6 +3254,26 @@ class LRACLI:
         # Handle fix
         if fix and (warnings > 0 or errors > 0):
             print("\n--- Fix Mode ---")
+
+            # 缺依赖要先装：后面的"重建任务书"本身就依赖 jinja2，
+            # 依赖没装齐时重建必然也失败
+            deps_check = check_runtime_dependencies(path)
+            if deps_check.status == "error":
+                if dry_run:
+                    print("  [dry-run] Would install missing runtime dependencies")
+                    print(f"     └─ {missing_install_hint()}")
+                else:
+                    print("  Installing missing runtime dependencies...")
+                    dep_result = fix_missing_dependencies()
+                    if dep_result.get("installed"):
+                        print(f"    ✅ Installed: {', '.join(dep_result['installed'])}")
+                    if dep_result.get("unfixable"):
+                        print("    ⚠️  以下问题装包解决不了，需要手动处理：")
+                        for item in dep_result["unfixable"]:
+                            print(f"       └─ {item}")
+                    if not dep_result.get("ok"):
+                        print(f"    ❌ 安装失败: {dep_result.get('failed')}")
+                        print(f"       └─ 手动执行: {dep_result.get('command')}")
 
             # 重复 ID：给冲突记录分配新 ID（任务书归实际持有它的那条）
             duplicates = check_duplicate_task_ids(path)

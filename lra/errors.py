@@ -77,10 +77,20 @@ ERROR_CATALOG = {
     },
     "jinja2_not_installed": {
         "message": "缺少 Jinja2 依赖，无法渲染任务书（模板里的 Jinja2 占位符语法需要它）",
-        "action": "pip install -U long-run-agent   # 会带上 jinja2 / pyyaml / filelock",
+        "action": "{install_cmd}",
         "hint": "任务已回滚，未写入 task_list（不会产生无任务书的僵尸任务）。"
+        "原始错误：{detail}。"
         "若 pip 明明装了却仍报此错，多半是有同名文件遮蔽了 Python 标准库"
-        "（例如当前目录下有个 inspect.py）——`lra doctor` 的 runtime_dependencies 检查会指出这一点",
+        "（例如当前目录下有个 inspect.py）——`lra doctor --check runtime_dependencies` 会指出这一点",
+        "category": "environment",
+    },
+    "jinja2_import_failed": {
+        "message": "Jinja2 导入失败，无法渲染任务书",
+        "action": "{install_cmd}",
+        "hint": "任务已回滚，未写入 task_list（不会产生无任务书的僵尸任务）。"
+        "原始错误：{detail}。"
+        "如果原始错误里出现「遮蔽」字样，装包没用——得把那个文件改名或移出工作目录；"
+        "否则先按上面的命令重装一次",
         "category": "environment",
     },
     "task_file_create_failed": {
@@ -98,6 +108,54 @@ ERROR_CATALOG = {
 }
 
 
+def _safe_format(template: str, context: Dict[str, Any]) -> str:
+    """格式化模板，缺 key 时不炸。
+
+    错误文案里的占位符不能因为调用方少传一个字段就崩掉——
+    报错路径本身再抛异常，等于把问题藏得更深。
+
+    缺掉的占位符也不能留成裸的 ``{key}``：那会被用户当成文案的一部分，
+    看着像出了 bug。替换成可读的说明。
+    """
+    try:
+        return template.format(**context)
+    except (KeyError, IndexError, ValueError):
+        # 逐个补齐缺失的占位符
+        import string
+
+        class _SafeDict(dict):
+            def __missing__(self, key):  # noqa: D105
+                return f"（未提供 {key}）"
+
+        try:
+            return string.Formatter().vformat(template, (), _SafeDict(context))
+        except Exception:  # noqa: BLE001
+            return template.replace("{", "").replace("}", "")
+
+
+def _fill_dependency_context(error_code: str, context: Dict[str, Any]) -> Dict[str, Any]:
+    """依赖类错误自己补齐上下文，调用方不必知道细节。
+
+    少了这一步，``action`` 里就只剩一个 ``{install_cmd}`` 占位符——
+    报错文案引用了一个"看起来像命令、其实不是命令"的东西，
+    用户照着做只会更迷惑。
+    """
+    if error_code not in ("jinja2_not_installed", "jinja2_import_failed"):
+        return context
+
+    ctx = dict(context)
+    if not ctx.get("install_cmd"):
+        try:
+            from lra.deps import fix_hint_for
+
+            ctx["install_cmd"] = fix_hint_for("jinja2")
+        except Exception:  # noqa: BLE001 - 探测失败也不能让报错路径崩
+            ctx["install_cmd"] = "python3 -m pip install --user long-run-agent"
+    if not ctx.get("detail"):
+        ctx["detail"] = "（无更多信息）"
+    return ctx
+
+
 def get_error_with_action(error_code: str, context: Dict[str, Any]) -> Dict[str, Any]:
     """
     Get error message with actionable suggestion.
@@ -109,6 +167,7 @@ def get_error_with_action(error_code: str, context: Dict[str, Any]) -> Dict[str,
     Returns:
         Dict with keys: error, message, action, hint, category
     """
+    context = _fill_dependency_context(error_code, context or {})
     error_def = ERROR_CATALOG.get(
         error_code,
         {
@@ -120,18 +179,15 @@ def get_error_with_action(error_code: str, context: Dict[str, Any]) -> Dict[str,
     )
 
     # Format message
-    message = error_def["message"].format(**context)
+    message = _safe_format(error_def["message"], context)
 
     # Format action
-    action = error_def["action"].format(**context)
+    action = _safe_format(error_def["action"], context)
 
     # Format hint if present
     hint = None
     if error_def.get("hint"):
-        try:
-            hint = error_def["hint"].format(**context)
-        except KeyError:
-            hint = error_def["hint"]
+        hint = _safe_format(error_def["hint"], context)
 
     return {
         "error": error_code,

@@ -1,4 +1,4 @@
-# LRA - AI Agent Task Manager v5.4.1
+# LRA - AI Agent Task Manager v5.5.0
 
 **规范驱动 + 任务管理 + 质量保障系统 + 迭代阶段引导**
 
@@ -19,11 +19,12 @@
 - **♻️ 任务跳过/取消/召回** (v5.3.0): **横向生命周期退出——skip 暂缓、cancel 作废（解锁下游）、recall 召回**
 - **🩹 任务自愈** (v5.3.1): **任务 ID 不再撞号、创建失败自动回滚；`lra doctor --fix` 内置去重 + 重建缺失的任务书**
 - **🔄 任务复位** (v5.4.0): **`lra reset` 把 worker 被 kill 后卡住的任务打回待办——带锁保护 + 审计记录，不再手改 task_list.json**
+- **🔧 依赖自愈** (v5.5.0): **`lra doctor` 自检 jinja2/pyyaml/filelock——区分"没装 / 被同名文件遮蔽 / 装坏了"，`doctor --fix` 直接装上；报错文案给出的命令在 PEP 668 环境里真能跑通**
 
 ## 安装
 
 ```bash
-# 安装（自动包含 Jinja2）
+# 安装（自动包含全部运行时依赖）
 pip install long-run-agent
 
 # 开发环境
@@ -34,6 +35,48 @@ pip install long-run-agent[full]
 ```
 
 **注意**：安装包名为 `long-run-agent`，命令行工具为 `lra`。
+
+### 运行时依赖
+
+LRA 有三个硬依赖，`pip install long-run-agent` 会自动带上：
+
+| 依赖 | 用途 | 缺失时的症状 |
+|------|------|--------------|
+| `jinja2>=3.0` | 渲染任务书模板 | `lra create` 失败，任务被回滚 |
+| `pyyaml>=6.0` | 读写模板与 constitution | `lra init` / 模板读写失败 |
+| `filelock>=3.9.0` | 文件锁（并发写 task_list） | 加锁失败，无法并发写 |
+
+### 环境体检：`lra doctor`
+
+装完先体检一次，依赖缺失、装错地方、被同名文件遮蔽都能查出来：
+
+```bash
+lra doctor --check runtime_dependencies   # 只看依赖
+lra doctor --fix                          # 缺什么装什么（内置自愈）
+```
+
+### 装不上？PEP 668（externally-managed）
+
+homebrew / 系统自带的 Python 会直接拒绝 `pip install`：
+
+```
+error: externally-managed-environment
+```
+
+这不是 LRA 的问题，是 pip 在保护你的系统 Python。两种解法：
+
+```bash
+# 方案 A：装到用户目录（推荐，不碰系统 Python）
+python3 -m pip install --user --break-system-packages long-run-agent
+
+# 方案 B：用虚拟环境（最干净）
+python3 -m venv .venv && source .venv/bin/activate
+pip install long-run-agent
+```
+
+> ⚠️ **用 `python3 -m pip`，不要用裸 `pip`**。PATH 上有多个 Python 时，裸 `pip` 经常装到另一个解释器里——装完 `lra` 还是报缺依赖。
+>
+> `lra doctor` 和报错文案里给出的命令已经自动适配了 PEP 668，直接复制粘贴即可。
 
 ## 快速开始
 
