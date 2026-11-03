@@ -48,6 +48,7 @@ LRA v5.3.1 | AI Agent 任务管理 + 质量保障 + Constitution
    测试: regression-test | browser-test | quality-check
    依赖: deps | check-blocked
    批量: batch set|delete|claim
+   生命周期: skip | cancel | recall | reset
 
 🔀 任务拆分
    lra decompose <id>                 # 分析任务并建议如何拆分
@@ -2102,6 +2103,93 @@ class LRACLI:
         else:
             output({"error": msg, "task_id": task_id}, json_mode)
 
+    def cmd_reset(
+        self,
+        task_id: str,
+        reason: str = "",
+        force: bool = False,
+        json_mode: bool = False,
+    ):
+        """复位任务：把卡住的任务（worker 被 kill）打回初始状态，等派重做。
+
+        `lra set <id> pending` 会被状态机拒绝（in_progress → pending 不是
+        合法流转），旧办法是手改 task_list.json——多 worker 并发写时会丢更新。
+        """
+        if not self._check_project():
+            output({"error": "not_initialized"}, json_mode)
+            return
+
+        task, lookup_err = self.task_manager.get_unique(task_id)
+        if lookup_err:
+            self._report_lookup_error(task_id, lookup_err, json_mode)
+            return
+        if not task:
+            output({"error": "not_found", "task_id": task_id}, json_mode)
+            sys.exit(1)
+
+        previous_status = task.get("status", "pending")
+
+        # 还活着的 worker 持有锁 → 拒绝（除非 --force）
+        active, lock = self.locks_manager.is_lock_active(task_id)
+        if active and not force:
+            err = {
+                "ok": False,
+                "error": "locked_by_active_worker",
+                "task_id": task_id,
+                "session_id": (lock or {}).get("session_id", ""),
+                "last_heartbeat": (lock or {}).get("last_heartbeat", ""),
+                "hint": (
+                    "该任务正被一个心跳正常的 worker 持有；"
+                    "确认对方已死再复位，或加 --force 强制复位"
+                ),
+            }
+            if json_mode:
+                output(err, json_mode)
+            else:
+                print(f"❌ {err['hint']}")
+                print(f"   会话: {err['session_id']}  最后心跳: {err['last_heartbeat']}")
+            sys.exit(1)
+
+        success, result = self.task_manager.reset_task(task_id, reason=reason, force=force)
+        if not success:
+            err = {"ok": False, "error": result, "task_id": task_id}
+            if json_mode:
+                output(err, json_mode)
+            else:
+                print(f"❌ 复位失败：{result}")
+                if result.startswith("lifecycle_state:"):
+                    print(f"💡 建议: lra recall {task_id}")
+                elif result == "already_pending":
+                    print("   任务本来就是待办状态，无需复位")
+                elif result.startswith("invalid_state:"):
+                    print("   已完成的任务不允许复位（会抹掉工作成果）")
+            sys.exit(1)
+
+        # 复位 = 原 worker 死了，它的锁必须一起清掉，否则新 worker claim 不到
+        try:
+            self.locks_manager.release(task_id)
+        except Exception:
+            pass
+
+        if json_mode:
+            output(
+                {
+                    "ok": True,
+                    "task_id": task_id,
+                    "status": result,
+                    "previous_status": previous_status,
+                    "reason": reason,
+                    "forced": bool(force),
+                },
+                json_mode,
+            )
+        else:
+            print(f"✅ 已复位：{task_id}（{previous_status} → {result}）")
+            if reason:
+                print(f"   原因: {reason}")
+            # 稳定输出锚点：永远放在 stdout 末行，方便脚本 tail -1 取结果
+            print(f"Reset: {task_id}")
+
     def cmd_pause(self, task_id: str, note: str = "", json_mode: bool = False):
         success, msg = self.locks_manager.pause(task_id, note=note)
         output({"ok": success, "message": msg}, json_mode)
@@ -3673,6 +3761,27 @@ def main():
     recall_p = subparsers.add_parser("recall", help="召回 skipped/cancelled 任务回到正常流程")
     recall_p.add_argument("task_id")
 
+    # reset —— 复位卡住的任务（worker 被 kill 后 in_progress → pending）
+    reset_p = subparsers.add_parser(
+        "reset",
+        help="复位卡住的任务（in_progress/blocked → 初始状态）",
+        description="""把卡住的任务打回初始状态，等派重做。
+
+典型场景：worker 超时被 kill，任务卡在 in_progress，而 `lra set <id> pending`
+会被状态机拒绝。reset 绕过状态机，是唯一允许该复位方向的入口。
+
+- 活的 worker 持有锁时拒绝复位（加 --force 可强制）
+- 复位会清掉死掉的 worker 留下的锁
+- 复位会写审计记录（谁、何时、从什么状态、为什么）到任务的 reset_history
+""",
+    )
+    reset_p.add_argument("task_id")
+    reset_p.add_argument("--reason", default="", help="复位原因（记录到 reset_history）")
+    reset_p.add_argument("--force", action="store_true", help="即使锁的心跳正常也强制复位")
+    reset_p.add_argument(
+        "--json", action="store_true", default=argparse.SUPPRESS, help="JSON output"
+    )
+
     # split
     split_p = subparsers.add_parser(
         "split",
@@ -4098,6 +4207,8 @@ Examples:
         cli.cmd_cancel(args.task_id, args.reason, json_mode)
     elif args.command == "recall":
         cli.cmd_recall(args.task_id, json_mode)
+    elif args.command == "reset":
+        cli.cmd_reset(args.task_id, args.reason, args.force, json_mode)
     elif args.command == "split":
         cli.cmd_split(args.task_id, args.count, args.plan, args.plan_file, args.auto, json_mode)
     elif args.command == "decompose":

@@ -11,7 +11,7 @@ import subprocess
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
-from lra.config import Config, SafeJson
+from lra.config import Config, SafeJson, get_agent_id
 from lra.template_manager import TemplateManager
 
 
@@ -663,6 +663,69 @@ class TaskManager:
                 self._save(data)
                 # 依赖关系由 get_ready_tasks 动态重算，无需在此特殊处理
                 return True, initial
+        return False, "not_found"
+
+    def reset_task(self, task_id: str, reason: str = "", force: bool = False) -> Tuple[bool, str]:
+        """复位任务：把卡住的任务打回初始状态，等派重做。
+
+        专治"worker 超时被 kill，任务卡在 in_progress"——`lra set <id> pending`
+        会被状态机拒绝（in_progress → pending 不是合法流转），唯一的旧办法是
+        手改 task_list.json，而那在多 worker 并发写时会丢更新。
+
+        与 update_status 的区别：
+        - 绕过状态机（这是唯一允许 in_progress → pending 的入口）
+        - 写审计记录（谁、何时、从什么状态、为什么）
+        - 清零 Ralph 迭代上下文（新 worker 不继承死掉的 iteration 计数）
+        """
+        data = self._load()
+        if not data:
+            return False, "not_initialized"
+        for t in data.get("tasks", []):
+            if t.get("id") != task_id:
+                continue
+
+            current = t.get("status", "pending")
+            if current in ("skipped", "cancelled"):
+                return False, f"lifecycle_state:{current}"
+            if current in ("pending", "drafting"):
+                return False, "already_pending"
+
+            template = t.get("template", "task")
+            if current in ("truly_completed", "force_completed") or self._is_final_status(
+                t, current
+            ):
+                # 已完成的任务复位=抹掉工作成果，不允许
+                return False, f"invalid_state:{current}"
+
+            initial = self._get_initial_status(template)
+            now = datetime.now().isoformat()
+
+            entry = {
+                "at": now,
+                "previous_status": current,
+                "status": initial,
+                "reason": reason,
+                "agent": get_agent_id(),
+                "forced": bool(force),
+            }
+            history = t.get("reset_history")
+            if not isinstance(history, list):
+                history = []
+            history.append(entry)
+            t["reset_history"] = history
+
+            # 新 worker 不该继承死掉的迭代上下文：iteration/quality_checks 归零，
+            # optimization_history 保留（那是审计痕迹，不是运行时状态）
+            ralph = t.get("ralph")
+            if isinstance(ralph, dict):
+                ralph["iteration"] = 0
+                ralph["quality_checks"] = {}
+                ralph["issues"] = []
+
+            t["status"] = initial
+            t["updated_at"] = now
+            self._save(data)
+            return True, initial
         return False, "not_found"
 
     def _validate_constitution(

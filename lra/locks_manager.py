@@ -60,6 +60,21 @@ class LocksManager:
         data = self._load()
         return data.get("locks", {}).get(task_id)
 
+    def is_lock_active(self, task_id: str) -> Tuple[bool, Optional[Dict[str, Any]]]:
+        """锁是否被一个"还活着"的 worker 持有。
+
+        心跳过期（孤儿）的锁不算活着——那种锁正是 worker 被 kill 留下的，
+        复位任务时应该连它一起清掉。
+        """
+        lock = self.get_lock(task_id)
+        if not lock:
+            return False, None
+        if lock.get("status") != LockStatus.CLAIMED:
+            return False, lock
+        if self._check_orphan(lock):
+            return False, lock
+        return True, lock
+
     def _get_parent_id(self, task_id: str) -> Optional[str]:
         task = self.task_manager.get(task_id)
         return task.get("parent_id") if task else None

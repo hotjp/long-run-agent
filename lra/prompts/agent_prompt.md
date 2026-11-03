@@ -151,6 +151,21 @@ lra recall <id>                                   # 把 skipped/cancelled 召回
 
 ---
 
+## 复位卡住的任务
+
+worker 超时被 kill，任务卡在 `in_progress`——`lra set <id> pending` 会被状态机拒绝
+（in_progress → pending 不是合法流转）。**不要手改 task_list.json**（多 worker 并发写会丢更新）：
+
+```bash
+lra reset <id> --reason "worker 超时被 kill"   # 复位到 pending，等派重做
+```
+
+- 活的 worker 持有锁（心跳新鲜）时会被拒绝——先确认对方真的死了，再加 `--force`。
+- 复位会清掉死掉的 worker 留下的锁，并把这次复位记进任务的 `reset_history`。
+- 已完成的任务不允许复位（会抹掉工作成果）；`skipped` / `cancelled` 请用 `lra recall`。
+
+---
+
 ## 停止条件
 
 **每轮结束前检查**：
