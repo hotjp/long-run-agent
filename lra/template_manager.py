@@ -464,14 +464,29 @@ pytest tests/test_xxx.py -v
         return sorted(templates, key=sort_key)
 
     def load_template(self, name: Optional[str]) -> Optional[Dict[str, Any]]:
+        template, _ = self.load_template_detailed(name)
+        return template
+
+    def load_template_detailed(
+        self, name: Optional[str]
+    ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+        """
+        加载模板，并区分失败原因。
+
+        原实现用裸 except 把"文件不存在"和"YAML 语法错"都变成 None，
+        导致模板损坏时 create_task_file 静默失败、任务书凭空消失。
+        """
         path = os.path.join(self.templates_dir, f"{name}.yaml")
         if not os.path.exists(path):
-            return None
+            return None, "template_not_found"
         try:
             with open(path, encoding="utf-8") as f:
-                return yaml.safe_load(f)
-        except:
-            return None
+                data = yaml.safe_load(f)
+        except Exception as e:
+            return None, f"template_parse_error:{type(e).__name__}: {e}"
+        if data is None:
+            return None, "template_empty"
+        return data, None
 
     def get_template(self, name: str) -> Optional[Dict[str, Any]]:
         return self.load_template(name)
@@ -566,12 +581,13 @@ pytest tests/test_xxx.py -v
         title: str = "",
         variables: Optional[Dict[str, Any]] = None,
     ) -> Tuple[bool, str]:
-        template = self.load_template(template_name)
+        template, err = self.load_template_detailed(template_name)
         if not template:
-            template = self.load_template("task")
-
-        if not template:
-            return False, "template_not_found"
+            # 不再静默回退到 task 模板：回退会写出一个与元数据里 template 字段
+            # 不一致的任务书（声明 code-module，实际是 task 结构）。
+            # 5 个内置模板由 _ensure_builtin_templates 保证存在，
+            # 因此这里失败基本都意味着"模板被改坏了"——必须显式报错。
+            return False, err or "template_not_found"
 
         engine = template.get("template_engine", "jinja2")
         structure = template.get("structure", "# {{ id }}\n\n## 描述\n")
@@ -579,7 +595,11 @@ pytest tests/test_xxx.py -v
         if engine == "jinja2":
             if not JINJA2_AVAILABLE:
                 return False, "jinja2_not_installed"
-            structure = self._render_jinja2(structure, task_id, title, variables)
+            try:
+                structure = self._render_jinja2(structure, task_id, title, variables)
+            except Exception as e:
+                # 模板语法错误等渲染异常：返回明确的失败原因，而不是抛栈
+                return False, f"template_render_error:{type(e).__name__}: {e}"
         else:
             structure = self._render_simple(structure, task_id, title)
 
@@ -592,6 +612,12 @@ pytest tests/test_xxx.py -v
                 f.write(structure)
             return True, path
         except Exception as e:
+            # 清理半截文件，避免留下残缺任务书
+            try:
+                if os.path.exists(path):
+                    os.unlink(path)
+            except OSError:
+                pass
             return False, str(e)
 
     def _render_jinja2(

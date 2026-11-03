@@ -68,6 +68,25 @@ ERROR_CATALOG = {
         "hint": "或增加迭代上限: lra set {task_id} max_iterations 10",
         "category": "iteration",
     },
+    "duplicate_task_id": {
+        "message": "任务 ID 重复: {task_id}（task_list 中存在 {count} 条同名记录）",
+        "action": "lra doctor --fix  # 自动重新编号冲突记录",
+        "hint": "重复 ID 会导致读取到错误的任务书，修复前请勿操作该任务；"
+        "lra doctor --fix 会把冲突记录拆成独立 ID，任务书归实际持有它的那条",
+        "category": "data_integrity",
+    },
+    "task_file_create_failed": {
+        "message": "任务文件创建失败: {detail}",
+        "action": "lra doctor  # 检查模板是否损坏",
+        "hint": "任务已回滚，未写入 task_list（不会产生无任务书的僵尸任务）",
+        "category": "data_integrity",
+    },
+    "save_failed": {
+        "message": "task_list.json 写入失败",
+        "action": "lra doctor  # 检查文件权限与磁盘空间",
+        "hint": "任务未创建，task_list 未被修改",
+        "category": "data_integrity",
+    },
 }
 
 

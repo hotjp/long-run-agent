@@ -6,6 +6,7 @@ v3.5 - 支持 Ralph Loop 状态跟踪
 
 import json
 import os
+import re
 import subprocess
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
@@ -235,6 +236,63 @@ class TaskManager:
                     return True, path
         return False, []
 
+    def _existing_task_ids(self, data: Dict[str, Any]) -> set:
+        """task_list 中已被占用的任务 ID"""
+        return {t.get("id") for t in data.get("tasks", []) if t.get("id")}
+
+    def _reserved_task_ids(self, data: Dict[str, Any]) -> set:
+        """
+        已被占用的 ID 集合。
+
+        除 task_list 中的记录外，tasks/ 目录下已存在的 md 文件同样占位——
+        否则新任务会覆盖历史任务书（这正是 issue #2 "ID 撞号" 的放大机制）。
+        """
+        used = set(self._existing_task_ids(data))
+        try:
+            tasks_dir = Config.get_tasks_dir()
+            if os.path.isdir(tasks_dir):
+                for filename in os.listdir(tasks_dir):
+                    if filename.endswith(".md"):
+                        used.add(filename[:-3])
+        except OSError:
+            pass
+        return used
+
+    def _allocate_task_id(self, data: Dict[str, Any], parent_id: Optional[str]) -> str:
+        """
+        分配一个不与任何存量冲突的任务 ID。
+
+        规则：取存量中的最大序号 +1（而非"任务数量 +1"）。
+        后者会在历史任务被删除后回退，导致新任务与存量撞号；
+        撞号后 task_list 出现重复 ID，读取时会拿到旧任务的任务书。
+        """
+        used = self._reserved_task_ids(data)
+
+        if parent_id:
+            prefix = f"{parent_id}_"
+            max_suffix = 0
+            for t in data.get("tasks", []):
+                tid = t.get("id") or ""
+                if t.get("parent_id") != parent_id or not tid.startswith(prefix):
+                    continue
+                m = re.match(rf"^{re.escape(prefix)}(\d+)$", tid)
+                if m:
+                    max_suffix = max(max_suffix, int(m.group(1)))
+            n = max_suffix + 1
+            while f"{prefix}{n:02d}" in used:
+                n += 1
+            return f"{prefix}{n:02d}"
+
+        max_num = 0
+        for tid in used:
+            m = re.match(r"^task_(\d+)$", tid or "")
+            if m:
+                max_num = max(max_num, int(m.group(1)))
+        num = max_num + 1
+        while f"task_{num:03d}" in used:
+            num += 1
+        return f"task_{num:03d}"
+
     def _do_create(
         self,
         data: Dict[str, Any],
@@ -249,18 +307,7 @@ class TaskManager:
         variables: Optional[Dict[str, Any]],
     ) -> Tuple[bool, Dict[str, Any]]:
         """执行实际的任务创建"""
-        existing = data.get("tasks", [])
-
-        if parent_id:
-            sibling_count = len([t for t in existing if t.get("parent_id") == parent_id])
-            parts = parent_id.split("_")
-            if len(parts) >= 3:
-                task_id = f"{parent_id}_{sibling_count + 1:02d}"
-            else:
-                task_id = f"{parent_id}_{sibling_count + 1:02d}"
-        else:
-            num = len([t for t in existing if not t.get("parent_id")]) + 1
-            task_id = f"task_{num:03d}"
+        task_id = self._allocate_task_id(data, parent_id)
 
         # 检查依赖是否满足
         initial_status = self._get_initial_status(template)
@@ -296,9 +343,30 @@ class TaskManager:
         }
 
         data["tasks"].append(task)
-        self._save(data)
+        if not self._save(data):
+            data["tasks"].pop()
+            return False, {"error": "save_failed", "task_id": task_id}
 
-        self.template_manager.create_task_file(task_id, template, description, variables)
+        # 任务书必须落盘才算创建成功。
+        # 此前 create_task_file 的返回值被丢弃：模板损坏时任务留在 task_list 里却没有 md，
+        # 下游只能读到别的任务的内容（issue #2 问题1）。
+        try:
+            ok, detail = self.template_manager.create_task_file(
+                task_id, template, description, variables
+            )
+        except Exception as e:
+            # 连 TemplateManager 初始化失败（如模板目录不可写）也要回滚，
+            # 否则会留下"有元数据、无任务书"的僵尸任务
+            ok, detail = False, f"template_manager_error:{type(e).__name__}: {e}"
+        if not ok:
+            # 回滚：不留下"有元数据、无任务书"的僵尸任务
+            data["tasks"].pop()
+            self._save(data)
+            return False, {
+                "error": "task_file_create_failed",
+                "detail": detail,
+                "task_id": task_id,
+            }
 
         # v3.3.0: 文档任务自动绑定
         if template != "doc-update":
@@ -347,6 +415,37 @@ class TaskManager:
             if t.get("id") == task_id:
                 return t
         return None
+
+    def find_duplicates(self) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        找出 task_list 中 ID 重复的记录组。
+
+        重复 ID 是 issue #2 的核心故障模式：读取时只能命中其中一条，
+        worker 因此可能拿到错误的任务书。此处只做检测，不做修改。
+        """
+        data = self._load()
+        if not data:
+            return {}
+        groups: Dict[str, List[Dict[str, Any]]] = {}
+        for t in data.get("tasks", []):
+            tid = t.get("id")
+            if tid:
+                groups.setdefault(tid, []).append(t)
+        return {tid: recs for tid, recs in groups.items() if len(recs) > 1}
+
+    def get_unique(self, task_id: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+        """
+        安全获取任务：ID 重复时返回错误，而不是静默命中其中一条。
+
+        Returns:
+            (task, None) 正常
+            (None, "duplicate_task_id:<count>") ID 重复
+            (None, None) 任务不存在（与"重复"区分开，由调用方按 not_found 处理）
+        """
+        dups = self.find_duplicates()
+        if task_id in dups:
+            return None, f"duplicate_task_id:{len(dups[task_id])}"
+        return self.get(task_id), None
 
     def update_status(self, task_id: str, status: str, force: bool = False) -> Tuple[bool, str]:
         data = self._load()

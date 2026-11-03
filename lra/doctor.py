@@ -5,9 +5,11 @@ v5.0 - Check installation, locks, tasks, constitution, and more
 """
 
 import os
+import re
+import shutil
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import List
+from typing import Any, Dict, List
 
 from lra.config import CURRENT_VERSION, Config, SafeJson
 from lra.locks_manager import LockStatus
@@ -183,6 +185,210 @@ def check_task_files(path: str) -> DoctorCheck:
         message=f"All {len(tasks)} task files exist",
         category="tasks",
     )
+
+
+def check_duplicate_task_ids(path: str) -> DoctorCheck:
+    """Check for duplicate task IDs in task_list.json
+
+    重复 ID 是最危险的数据完整性问题：读取任务时只能命中其中一条，
+    worker 因此可能拿到另一条记录的任务书（issue #2）。
+    """
+    task_list_path = os.path.join(path, Config.METADATA_DIR, Config.TASK_LIST_FILE)
+    data = SafeJson.read(task_list_path)
+    if not data:
+        return DoctorCheck(
+            name="duplicate_task_ids",
+            status="ok",
+            message="No task_list to check",
+            category="tasks",
+        )
+
+    groups = {}
+    for task in data.get("tasks", []):
+        tid = task.get("id")
+        if tid:
+            groups.setdefault(tid, []).append(task)
+
+    duplicates = {tid: recs for tid, recs in groups.items() if len(recs) > 1}
+
+    if duplicates:
+        names = ", ".join(list(duplicates)[:5]) + ("..." if len(duplicates) > 5 else "")
+        return DoctorCheck(
+            name="duplicate_task_ids",
+            status="error",
+            message=f"{len(duplicates)} duplicate task id(s) found",
+            detail=(
+                f"Duplicated: {names} "
+                "(每个 ID 有多条记录；读取任务时会拿到错误的记录)"
+            ),
+            fix="lra doctor --fix  # 重新编号冲突记录",
+            category="tasks",
+        )
+
+    return DoctorCheck(
+        name="duplicate_task_ids",
+        status="ok",
+        message="No duplicate task ids",
+        category="tasks",
+    )
+
+
+def _reserved_ids_and_files(path: str, tasks: List[Dict[str, Any]]) -> set:
+    """已被占用的 ID：task_list 中的记录 + tasks/ 目录下已存在的 md 文件名"""
+    reserved = {t.get("id") for t in tasks if t.get("id")}
+    tasks_dir = os.path.join(path, Config.METADATA_DIR, Config.TASKS_DIR)
+    if os.path.isdir(tasks_dir):
+        for filename in os.listdir(tasks_dir):
+            if filename.endswith(".md"):
+                reserved.add(filename[:-3])
+    return reserved
+
+
+def _next_free_id(old_id: str, reserved: set, known_ids: set) -> str:
+    """为一条重复记录分配一个未被占用的新 ID
+
+    - 子任务（``{parent}_{NN}``）保持父任务前缀，在父任务下顺延
+    - 顶层任务（``task_NNN``）在全局最大编号后顺延
+    - 其它格式无法安全推断父级，退回全局 task_NNN 序列
+    """
+    m = re.match(r"^(?P<base>.+)_(?P<num>\d+)$", old_id or "")
+    if m and m.group("base") in known_ids:
+        parent = m.group("base")
+        n = int(m.group("num"))
+        while f"{parent}_{n:02d}" in reserved:
+            n += 1
+        return f"{parent}_{n:02d}"
+
+    max_num = 0
+    for tid in reserved:
+        tm = re.match(r"^task_(\d+)$", tid or "")
+        if tm:
+            max_num = max(max_num, int(tm.group(1)))
+    num = max_num + 1
+    while f"task_{num:03d}" in reserved:
+        num += 1
+    return f"task_{num:03d}"
+
+
+def _find_task_book_owner(path: str, group: List[Dict[str, Any]], tid: str) -> int:
+    """判断一组同 ID 记录中，谁真正拥有磁盘上的那份任务书
+
+    撞号意味着多条记录共用同一个 md 文件，而文件里只会留下最后一次写入
+    的内容。任务书正文里带着该任务的描述，用它做匹配可以确定主人；
+    匹配不上（人工改过等）则退回"最后创建的那条"—— 也就是最后写文件的那条。
+    """
+    for task in group:
+        rel = task.get("task_file") or f"tasks/{tid}.md"
+        abs_path = os.path.join(path, Config.METADATA_DIR, rel)
+        if not os.path.exists(abs_path):
+            continue
+        try:
+            with open(abs_path, encoding="utf-8") as f:
+                text = f.read()
+        except OSError:
+            break
+        matches = [
+            i
+            for i, t in enumerate(group)
+            if (t.get("description") or "").strip() and (t.get("description") or "").strip() in text
+        ]
+        if len(matches) == 1:
+            return matches[0]
+        # 内容对不上 → 取 created_at 最晚的那条（最后写文件的人）
+        return max(
+            range(len(group)),
+            key=lambda i: (group[i].get("created_at") or "", i),
+        )
+    # 没有物理任务书 → 保持原状，第一条记录沿用原 ID
+    return 0
+
+
+def fix_duplicate_task_ids(path: str, dry_run: bool = False) -> Dict[str, Any]:
+    """修复 task_list.json 中的重复任务 ID
+
+    策略：
+
+    1. 一组同 ID 的记录里，**拥有磁盘任务书的那条保留原 ID**（任务书正文
+       里的描述决定了主人），其余记录分配新 ID；
+    2. 失去任务书的记录把 ``task_file`` 清空 —— 继续指向那份文件只会让
+       worker 读到描述别的任务的任务书，正是本次要消除的串台；
+    3. 依赖与父子关系不改写：它们指向的 ID 字符串保持不变，只是从
+       "随机命中某一条"变成"确定命中唯一一条"。
+
+    修复前会自动在 ``backup/`` 留一份 task_list.json 快照。
+    """
+    task_list_path = os.path.join(path, Config.METADATA_DIR, Config.TASK_LIST_FILE)
+    data = SafeJson.read(task_list_path)
+    if not data:
+        return {"ok": False, "error": "task_list_unreadable", "fixed": []}
+
+    tasks = data.get("tasks", [])
+    if not isinstance(tasks, list):
+        return {"ok": False, "error": "task_list_malformed", "fixed": []}
+
+    groups: Dict[str, List[int]] = {}
+    for idx, task in enumerate(tasks):
+        tid = task.get("id")
+        if tid:
+            groups.setdefault(tid, []).append(idx)
+
+    duplicated = {tid: idxs for tid, idxs in groups.items() if len(idxs) > 1}
+    if not duplicated:
+        return {"ok": True, "fixed": [], "count": 0, "dry_run": dry_run}
+
+    known_ids = set(groups.keys())
+    reserved = _reserved_ids_and_files(path, tasks)
+
+    fixed: List[Dict[str, str]] = []
+    lost: List[Dict[str, str]] = []
+    now = datetime.now().isoformat()
+
+    for tid, idxs in duplicated.items():
+        group = [tasks[i] for i in idxs]
+        owner_pos = _find_task_book_owner(path, group, tid)
+        owner_idx = idxs[owner_pos]
+
+        for idx in idxs:
+            if idx == owner_idx:
+                continue
+            task = tasks[idx]
+            new_id = _next_free_id(tid, reserved, known_ids)
+            reserved.add(new_id)
+
+            if not dry_run:
+                task["id"] = new_id
+                task["task_file"] = ""  # 任务书归主人这条，被撞号的那条没有自己的
+                task["updated_at"] = now
+
+            entry = {
+                "old_id": tid,
+                "new_id": new_id,
+                "description": (task.get("description") or "")[:60],
+            }
+            fixed.append(entry)
+            lost.append(entry)
+
+    if not dry_run and fixed:
+        backup_dir = os.path.join(path, Config.METADATA_DIR, Config.BACKUP_DIR)
+        os.makedirs(backup_dir, exist_ok=True)
+        backup_path = os.path.join(
+            backup_dir, f"task_list.json.pre-dedupe.{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        )
+        try:
+            shutil.copy2(task_list_path, backup_path)
+        except OSError:
+            backup_path = ""
+
+        if not SafeJson.write(task_list_path, data):
+            return {"ok": False, "error": "write_failed", "fixed": fixed, "lost": lost}
+
+    return {
+        "ok": True,
+        "fixed": fixed,
+        "lost": lost,
+        "count": len(fixed),
+        "dry_run": dry_run,
+    }
 
 
 def check_orphaned_tasks(path: str) -> DoctorCheck:
@@ -558,6 +764,7 @@ def run_diagnostics(path: str = ".") -> DoctorResult:
         check_locks_valid(path),
         check_constitution_valid(path),
         check_task_files(path),
+        check_duplicate_task_ids(path),
         check_orphaned_tasks(path),
         check_circular_deps(path),
         check_orphaned_locks(path),

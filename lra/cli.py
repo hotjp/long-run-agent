@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional
 from lra.batch_lock_manager import BatchLockManager
 from lra.cli_extensions import CLIExtensions
 from lra.config import CURRENT_VERSION, Config, get_agent_id, validate_project_initialized
-from lra.errors import get_error_with_action
+from lra.errors import format_error_display, get_error_with_action
 from lra.locks_manager import LocksManager
 from lra.parsers import parse_dependencies, parse_variables
 from lra.quality_checker import QualityChecker
@@ -972,8 +972,9 @@ class LRACLI:
             variables=vars_dict if vars_dict else None,
         )
         if success:
+            task_id = result.get("id", "")
             if json_mode:
-                output({"ok": True, "task": result}, json_mode)
+                output({"ok": True, "id": task_id, "task": result}, json_mode)
             else:
                 # 如果没有提供设计，显示警告
                 if not vars_dict:
@@ -1014,15 +1015,41 @@ class LRACLI:
                 tip = self._get_tip_for_command("create", description)
                 if tip:
                     print(f"{tip}")
+
+                # 稳定输出锚点：永远放在 stdout 末行。
+                # 上方引导文案里可能出现依赖项的 task_id，脚本应当用 tail -1 取新任务 ID，
+                # 或直接用 `lra create ... --json`（JSON 里 id 是顶层字段）。
+                print(f"Created: {task_id}")
         else:
             # v3.3.3: 严重错误才显示
-            if result.get("error") == "cycle_dependency":
+            error_code = result.get("error", "unknown")
+            if error_code == "cycle_dependency":
                 print("❌ 错误：循环依赖")
                 print(f"   依赖路径：{' → '.join(result.get('path', []))}")
                 print("\n✅ 解决方案：")
                 print("   请检查依赖关系，避免循环")
+                sys.exit(1)
+
+            err_ctx = {
+                "task_id": result.get("task_id", ""),
+                "detail": result.get("detail", ""),
+                "count": result.get("count", ""),
+            }
+            err = get_error_with_action(error_code, err_ctx)
+            if json_mode:
+                output(
+                    {
+                        "ok": False,
+                        **result,
+                        "message": err["message"],
+                        "action": err["action"],
+                    },
+                    json_mode,
+                )
             else:
-                output(result, json_mode)
+                print(format_error_display(err))
+            # 失败必须以非零退出码结束，否则调度脚本无法感知失败
+            sys.exit(1)
 
     def cmd_new(
         self,
@@ -1141,6 +1168,12 @@ class LRACLI:
             output({"error": "not_initialized"}, json_mode)
             return
 
+        # ID 重复时明确报错：静默命中其中一条会让 worker 拿到别的任务书
+        task, lookup_err = self.task_manager.get_unique(task_id)
+        if lookup_err:
+            self._report_lookup_error(task_id, lookup_err, json_mode)
+            return
+
         task = self.task_manager.show(task_id)
         if not task:
             output({"error": "not_found"}, json_mode)
@@ -1194,6 +1227,31 @@ class LRACLI:
             self._display_ralph_loop_status(task_id, ralph_state)
 
         output(task, json_mode)
+
+    def _report_lookup_error(self, task_id: str, lookup_err: str, json_mode: bool = False):
+        """
+        统一的"读取任务失败"出口。
+
+        错误信息必须自带可执行的修复命令——这是 agent 能自愈的关键。
+        """
+        code, _, detail = lookup_err.partition(":")
+        err_ctx = {"task_id": task_id, "count": detail, "detail": detail}
+        err = get_error_with_action(code, err_ctx)
+        if json_mode:
+            output(
+                {
+                    "ok": False,
+                    "error": code,
+                    "task_id": task_id,
+                    "message": err["message"],
+                    "action": err["action"],
+                    "hint": err.get("hint"),
+                },
+                json_mode,
+            )
+        else:
+            print(format_error_display(err), file=sys.stderr)
+        sys.exit(1)
 
     def _display_iteration_guidance(self, task_id: str, task: Dict[str, Any]):
         """显示迭代阶段引导"""
@@ -1388,7 +1446,10 @@ class LRACLI:
             self._force_next_stage(task_id, json_mode)
             return
 
-        current_task = self.task_manager.get(task_id)
+        current_task, lookup_err = self.task_manager.get_unique(task_id)
+        if lookup_err:
+            self._report_lookup_error(task_id, lookup_err, json_mode)
+            return
         if not current_task:
             output({"error": "not_found"}, json_mode)
             return
@@ -1425,7 +1486,7 @@ class LRACLI:
             print(f"💡 建议: {err['action']}")
             if err.get("hint"):
                 print(f"   原因: {err['hint']}")
-            return
+            sys.exit(1)
 
         success, msg = self.task_manager.update_status(task_id, status)
         if success:
@@ -1495,6 +1556,9 @@ class LRACLI:
                 output({"ok": success, "status": msg}, json_mode)
 
         output({"ok": success, "status": msg}, json_mode)
+        if not success:
+            # 失败必须以非零退出码结束，否则调度脚本无法感知失败
+            sys.exit(1)
 
     def _run_quality_check_on_complete(self, task_id: str, template: str, json_mode: bool):
         """完成任务时自动运行质量检查"""
@@ -2920,6 +2984,7 @@ class LRACLI:
             check_circular_deps,
             check_config_valid,
             check_constitution_valid,
+            check_duplicate_task_ids,
             check_git_repo,
             check_installation,
             check_lock_file_valid,
@@ -2930,6 +2995,7 @@ class LRACLI:
             check_task_files,
             check_task_list_valid,
             check_version_tracking,
+            fix_duplicate_task_ids,
             fix_orphaned_locks,
             run_diagnostics,
         )
@@ -2970,6 +3036,7 @@ class LRACLI:
                 "locks": check_locks_valid,
                 "constitution": check_constitution_valid,
                 "task_files": check_task_files,
+                "duplicate_task_ids": check_duplicate_task_ids,
                 "orphaned_tasks": check_orphaned_tasks,
                 "circular_deps": check_circular_deps,
                 "orphaned_locks": check_orphaned_locks,
@@ -3042,8 +3109,29 @@ class LRACLI:
             print("\n❌ Overall: Issues found")
 
         # Handle fix
-        if fix and warnings > 0:
+        if fix and (warnings > 0 or errors > 0):
             print("\n--- Fix Mode ---")
+
+            # 重复 ID：给冲突记录分配新 ID（任务书归实际持有它的那条）
+            duplicates = check_duplicate_task_ids(path)
+            if duplicates.status == "error":
+                if dry_run:
+                    print("  [dry-run] Would renumber duplicate task ids")
+                else:
+                    print("  Renumbering duplicate task ids...")
+                    dedupe_result = fix_duplicate_task_ids(path)
+                    if dedupe_result.get("ok"):
+                        for item in dedupe_result.get("fixed", []):
+                            print(f"    ✅ {item['old_id']} → {item['new_id']}")
+                            desc = item.get("description") or "(无描述)"
+                            print(
+                                f"       └─ 任务书归 {item['old_id']}（{desc}）那条，"
+                                f"{item['new_id']} 的任务书需人工重建"
+                            )
+                        print(f"  ✅ Renumbered {dedupe_result.get('count', 0)} record(s)")
+                    else:
+                        print(f"  ❌ 修复失败: {dedupe_result.get('error')}")
+
             orphaned = check_orphaned_locks(path)
             if orphaned.status == "warning":
                 if dry_run:
@@ -3191,13 +3279,26 @@ class LRACLI:
         # 创建第一个任务
         if task_desc:
             print("📋 创建第一个任务...")
-            self.cmd_create(task_desc)
+            self._create_task_safely(task_desc)
         else:
             print("📋 下一步:")
             print('   lra create "任务描述"      # 创建第一个任务')
             print("   lra context                # 查看项目状态")
 
         print()
+
+    def _create_task_safely(self, task_desc: str) -> bool:
+        """lra start 内部调用 cmd_create：创建失败不中断后续引导流程
+
+        cmd_create 失败时以非零退出码结束（agent 需要感知失败），
+        但 lra start 是一串引导步骤，不该因为一次创建失败就整个中断。
+        """
+        try:
+            self.cmd_create(task_desc)
+            return True
+        except SystemExit:
+            print(f'   ⚠️  任务创建失败，可稍后重试：lra create "{task_desc}"')
+            return False
 
     def _start_needs_recovery(self, state: Dict[str, Any], auto: bool = False):
         """场景 2: 需要恢复"""
@@ -3235,7 +3336,7 @@ class LRACLI:
 
                 if task_desc:
                     print()
-                    self.cmd_create(task_desc)
+                    self._create_task_safely(task_desc)
         else:
             print("💡 建议运行：lra init --name {project_name}")
             print()
@@ -3289,7 +3390,7 @@ class LRACLI:
 
         if task_desc:
             print("📋 创建新任务...\n")
-            self.cmd_create(task_desc)
+            self._create_task_safely(task_desc)
         else:
             print("💡 所有任务都在进行中或已完成")
             print("   lra list                   # 查看所有任务")
@@ -3517,16 +3618,28 @@ def main():
         help="Dependency type: all or any (default: all)",
     )
     create_p.add_argument("--deadline", default=None, help="Task deadline (ISO: YYYY-MM-DD)")
+    create_p.add_argument(
+        "--json",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="JSON output (id 为顶层字段)",
+    )
 
     # show
     show_p = subparsers.add_parser("show", help="Show task")
     show_p.add_argument("task_id")
     show_p.add_argument("--include-records", action="store_true", help="Include task records")
+    show_p.add_argument(
+        "--json", action="store_true", default=argparse.SUPPRESS, help="JSON output"
+    )
 
     # set
     set_p = subparsers.add_parser("set", help="Update status")
     set_p.add_argument("task_id")
     set_p.add_argument("status")
+    set_p.add_argument(
+        "--json", action="store_true", default=argparse.SUPPRESS, help="JSON output"
+    )
 
     # skip / cancel / recall —— 横向生命周期退出（与正向状态机正交）
     skip_p = subparsers.add_parser("skip", help="跳过任务（隐藏出 ready，可 recall 召回）")

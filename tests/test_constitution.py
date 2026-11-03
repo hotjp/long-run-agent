@@ -6,6 +6,7 @@ import pytest
 import tempfile
 import os
 from pathlib import Path
+from lra.config import Config
 from lra.constitution import (
     ConstitutionManager,
     PrincipleValidator,
@@ -149,12 +150,23 @@ def test_gate_evaluator_command_gate():
     """测试命令门禁评估"""
     evaluator = GateEvaluator()
 
-    # 测试成功的命令（pytest 必定存在于测试环境，且在白名单内）
+    # 命令必须在 GateEvaluator.ALLOWED_COMMANDS 白名单内（安全约束）
     gate_config = {"type": "command", "name": "test_cmd", "command": "pytest --version"}
 
     result = evaluator.evaluate_gate(gate_config, "test_task", {})
     assert result.passed is True
     assert result.gate_name == "test_cmd"
+
+
+def test_gate_evaluator_command_gate_rejects_unlisted_command():
+    """白名单之外的命令必须被拒绝"""
+    evaluator = GateEvaluator()
+
+    gate_config = {"type": "command", "name": "test_echo", "command": "echo test"}
+
+    result = evaluator.evaluate_gate(gate_config, "test_task", {})
+    assert result.passed is False
+    assert "白名单" in result.message
 
 
 def test_gate_evaluator_field_gate():
@@ -167,7 +179,7 @@ def test_gate_evaluator_field_gate():
         task_dir.mkdir(parents=True, exist_ok=True)
 
         task_file = task_dir / "test_task.md"
-        task_file.write_text("# Test Task\n\n## test_field\nSome content\n")
+        task_file.write_text("# Test Task\n\n## test_field\nSome content\n", encoding="utf-8")
 
         evaluator = GateEvaluator()
 
