@@ -2,6 +2,43 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.4.1] - 2026-11-03
+
+修一个"报错文案指向错误方向"的问题：运行环境缺依赖（或依赖被同名文件遮蔽）时，
+LRA 报的是"任务文件创建失败 → 检查模板是否损坏 → lra doctor"，而真正的原因是环境。
+`lra doctor` 也查不出来——因为它压根没检查依赖。
+
+### 🐛 缺依赖时，报错指向模板而不是环境
+
+现场：任务书渲染不出来，报错 `ModuleNotFoundError: No module named 'bpy'`——
+看着像"jinja2 没装"，实际是**当前目录下有个 `inspect.py` 遮蔽了 Python 标准库**
+（`import inspect` 被劫持 → jinja2 和 filelock 一起炸）。而 LRA 的提示却是
+"检查模板是否损坏"，给的修复命令 `lra doctor` 也修不好。
+
+改动：
+
+- **新增 `lra doctor` 的 `runtime_dependencies` 检查**（category: environment）：
+  逐个探测 jinja2 / pyyaml / filelock，区分三种情况——
+  - 真的没装 → "缺少依赖: jinja2（渲染任务书模板）"
+  - 被同名文件遮蔽 → "依赖被同名文件遮蔽: jinja2 → 缺 bpy"，并指出实际加载路径
+  - 加载的不是 site-packages 里的那份 → 同样报被遮蔽
+  修复建议统一指向 `pip install -U long-run-agent`（它会带上全部依赖）。
+- **新增 `jinja2_not_installed` 错误码**：缺 jinja2 时 `lra create` 报
+  "缺少 Jinja2 依赖，无法渲染任务书" + `pip install -U long-run-agent`，
+  不再伪装成"模板损坏"。任务照旧回滚，不留僵尸任务。
+- **缺 filelock 时给一句话而不是裸 traceback**：LRA 直接起不来时，
+  提示 `pip install -U long-run-agent`。
+- **doctor 校验 constitution 时缺 PyYAML 不再让 doctor 自己崩掉**。
+
+### ✅ 验证
+
+- 新增 `tests/test_doctor_dependencies.py`：6 个用例（依赖齐全 / 缺失 / 被遮蔽 /
+  错误文案可执行 / 文案里不能有裸花括号（会被 `.format()` 炸掉）/ 缺 jinja2 时
+  create 回滚）。
+- 全量 **156 测试通过**，ruff 无新增告警。
+
+---
+
 ## [5.4.0] - 2026-11-03
 
 补齐 issue #2 剩下的问题3（缺少 `lra reset`），并给问题4（被取代的任务滞留）
